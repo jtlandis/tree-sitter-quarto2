@@ -19,9 +19,33 @@
     "named": true,
     "fields": {},
     "children": {
-      "multiple": false,
+      "multiple": true,
       "required": true,
       "types": [
+        {
+          "type": "emph",
+          "named": true
+        },
+        {
+          "type": "emph_end",
+          "named": true
+        },
+        {
+          "type": "emph_start",
+          "named": true
+        },
+        {
+          "type": "line_break",
+          "named": true
+        },
+        {
+          "type": "line_end",
+          "named": true
+        },
+        {
+          "type": "puncuation",
+          "named": true
+        },
         {
           "type": "word",
           "named": true
@@ -179,6 +203,21 @@
     }
   },
   {
+    "type": "line_break",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "line_end",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "paragraph",
     "named": true,
     "fields": {},
@@ -191,11 +230,19 @@
           "named": true
         },
         {
+          "type": "line_break",
+          "named": true
+        },
+        {
           "type": "line_end",
           "named": true
         },
         {
           "type": "paragraph_end",
+          "named": true
+        },
+        {
+          "type": "puncuation",
           "named": true
         },
         {
@@ -215,6 +262,56 @@
       "types": [
         {
           "type": "line_end",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "puncuation",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "colon",
+          "named": true
+        },
+        {
+          "type": "comma",
+          "named": true
+        },
+        {
+          "type": "period",
+          "named": true
+        },
+        {
+          "type": "quotation",
+          "named": true
+        },
+        {
+          "type": "semi_colon",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "quotation",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "double_quote",
+          "named": true
+        },
+        {
+          "type": "single_quote",
           "named": true
         }
       ]
@@ -269,12 +366,16 @@
     "named": false
   },
   {
-    "type": "*",
+    "type": "\\",
     "named": false
   },
   {
-    "type": "\\",
-    "named": false
+    "type": "colon",
+    "named": true
+  },
+  {
+    "type": "comma",
+    "named": true
   },
   {
     "type": "comment",
@@ -282,7 +383,31 @@
     "extra": true
   },
   {
+    "type": "double_quote",
+    "named": true
+  },
+  {
+    "type": "emph_end",
+    "named": true
+  },
+  {
+    "type": "emph_start",
+    "named": true
+  },
+  {
     "type": "line_end",
+    "named": true
+  },
+  {
+    "type": "period",
+    "named": true
+  },
+  {
+    "type": "semi_colon",
+    "named": true
+  },
+  {
+    "type": "single_quote",
     "named": true
   },
   {

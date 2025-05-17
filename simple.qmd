@@ -4,6 +4,7 @@ This is *some* text
 but we are still continuing
 Line break occured here.
 
+<!--
 There is a new break too.\
 new line.
 
@@ -12,4 +13,4 @@ new line.
 some *text\
 with more* text
 
-# more text
+# more text-->

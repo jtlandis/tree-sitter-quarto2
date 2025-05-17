@@ -61,7 +61,7 @@
         ]
       }
     },
-    "paragraph_end": {
+    "line_break": {
       "type": "PREC_RIGHT",
       "value": 0,
       "content": {
@@ -98,22 +98,26 @@
                 "name": "line_end"
               }
             ]
+          }
+        ]
+      }
+    },
+    "paragraph_end": {
+      "type": "PREC_RIGHT",
+      "value": 0,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "SYMBOL",
+            "name": "line_end"
           },
           {
-            "type": "SEQ",
-            "members": [
-              {
-                "type": "SYMBOL",
-                "name": "line_end"
-              },
-              {
-                "type": "REPEAT1",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "line_end"
-                }
-              }
-            ]
+            "type": "REPEAT1",
+            "content": {
+              "type": "SYMBOL",
+              "name": "line_end"
+            }
           }
         ]
       }
@@ -146,7 +150,15 @@
           },
           {
             "type": "SYMBOL",
+            "name": "line_break"
+          },
+          {
+            "type": "SYMBOL",
             "name": "line_end"
+          },
+          {
+            "type": "SYMBOL",
+            "name": "puncuation"
           }
         ]
       }
@@ -154,6 +166,68 @@
     "word": {
       "type": "PATTERN",
       "value": "[\\p{L}\\p{N}]+"
+    },
+    "puncuation": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "period"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "comma"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "colon"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "semi_colon"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "quotation"
+        }
+      ]
+    },
+    "period": {
+      "type": "STRING",
+      "value": "."
+    },
+    "comma": {
+      "type": "STRING",
+      "value": ","
+    },
+    "colon": {
+      "type": "STRING",
+      "value": ":"
+    },
+    "semi_colon": {
+      "type": "STRING",
+      "value": ";"
+    },
+    "quotation": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "single_quote"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "double_quote"
+        }
+      ]
+    },
+    "single_quote": {
+      "type": "STRING",
+      "value": "'"
+    },
+    "double_quote": {
+      "type": "STRING",
+      "value": "\""
     },
     "content": {
       "type": "PREC_RIGHT",
@@ -349,16 +423,46 @@
       "type": "SEQ",
       "members": [
         {
-          "type": "STRING",
-          "value": "*"
+          "type": "SYMBOL",
+          "name": "emph_start"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "word"
+            },
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "word"
+                },
+                {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "SYMBOL",
+                      "name": "_line"
+                    },
+                    {
+                      "type": "BLANK"
+                    }
+                  ]
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "word"
+                }
+              ]
+            }
+          ]
         },
         {
           "type": "SYMBOL",
-          "name": "word"
-        },
-        {
-          "type": "STRING",
-          "value": "*"
+          "name": "emph_end"
         }
       ]
     }
@@ -379,6 +483,14 @@
     {
       "type": "SYMBOL",
       "name": "line_end"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "emph_start"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "emph_end"
     }
   ],
   "inline": [],

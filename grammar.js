@@ -7,7 +7,7 @@ module.exports = grammar({
     $.comment,
   ],
 
-  externals: ($) => [$.line_end],
+  externals: ($) => [$.line_end, $.emph_start, $.emph_end],
 
   rules: {
     source_file: ($) => repeat($._section),
@@ -24,17 +24,22 @@ module.exports = grammar({
           seq(token.immediate("  "), $.line_end),
         ),
       ),
-    paragraph_end: ($) =>
-      prec.right(
-        choice(
-          seq(token.immediate("\\"), $.line_end),
-          seq(token.immediate("  "), $.line_end),
-          seq($.line_end, repeat1($.line_end)),
-        ),
-      ),
+    paragraph_end: ($) => prec.right(seq($.line_end, repeat1($.line_end))),
     _line_content: ($) => repeat1(choice($.emph, $.word)), //prec(1, repeat1(choice($.word, $.whitespace))),
-    _line: ($) => prec.right(choice($._line_content, $.line_end)), //prec.right(seq($._line, optional($.line_end))),
+    _line: ($) =>
+      prec.right(
+        choice($._line_content, $.line_break, $.line_end, $.puncuation),
+      ), //prec.right(seq($._line, optional($.line_end))),
     word: ($) => /[\p{L}\p{N}]+/,
+    puncuation: ($) =>
+      choice($.period, $.comma, $.colon, $.semi_colon, $.quotation),
+    period: ($) => ".",
+    comma: ($) => ",",
+    colon: ($) => ":",
+    semi_colon: ($) => ";",
+    quotation: ($) => choice($.single_quote, $.double_quote),
+    single_quote: ($) => "'",
+    double_quote: ($) => '"',
     content: ($) => prec.right(repeat1($.paragraph)),
     _section: ($) =>
       prec.right(choice(seq($.heading, $.content), $.heading, $.content)),
@@ -54,7 +59,12 @@ module.exports = grammar({
     heading_5: ($) => seq("#####", repeat($.word), $.line_end),
     heading_6: ($) => seq("######", repeat($.word), $.line_end),
 
-    emph: ($) => seq("*", $.word, "*"),
+    emph: ($) =>
+      seq(
+        $.emph_start,
+        choice($.word, seq($.word, optional($._line), $.word)),
+        $.emph_end,
+      ),
 
     // whitespace: ($) => /\s+/,
   },
