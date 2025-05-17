@@ -1,0 +1,37 @@
+<!-- comment -->
+
+# title {#sec-main, .class, hello="world"}
+
+Hello! here is some more text.
+
+## subsection {#sec-2}
+
+**some bold**
+
+
+```r
+x = 1 + 1
+y <- function(hello) {
+  return(hello)
+}
+```
+
+
+
+```{R hello, echo=F}
+
+print("hello world")
+```
+
+  ```{python hello-from-py, echo=F}
+  print("hello world")
+  ```
+
+
+
+# another section {#sec-final}
+
+* unordered list
+    + sub-item 1
+    + sub-item 2
+        - sub-sub-item 1
