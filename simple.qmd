@@ -4,8 +4,9 @@ This is *some* text
 but we are still continuing
 Line break occured here.
 
-<!--
+
 There is a new break too.\
+
 new line.
 
 ## Second Title
@@ -13,4 +14,4 @@ new line.
 some *text\
 with more* text
 
-# more text-->
+# more text

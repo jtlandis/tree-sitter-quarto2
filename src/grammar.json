@@ -35,7 +35,7 @@
     },
     "paragraph": {
       "type": "PREC_RIGHT",
-      "value": 0,
+      "value": 3,
       "content": {
         "type": "SEQ",
         "members": [
@@ -47,23 +47,15 @@
             }
           },
           {
-            "type": "CHOICE",
-            "members": [
-              {
-                "type": "SYMBOL",
-                "name": "paragraph_end"
-              },
-              {
-                "type": "BLANK"
-              }
-            ]
+            "type": "SYMBOL",
+            "name": "paragraph_end"
           }
         ]
       }
     },
     "line_break": {
       "type": "PREC_RIGHT",
-      "value": 0,
+      "value": 2,
       "content": {
         "type": "CHOICE",
         "members": [
@@ -104,20 +96,41 @@
     },
     "paragraph_end": {
       "type": "PREC_RIGHT",
-      "value": 0,
+      "value": 4,
       "content": {
-        "type": "SEQ",
+        "type": "CHOICE",
         "members": [
           {
-            "type": "SYMBOL",
-            "name": "line_end"
+            "type": "SEQ",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "line_break"
+              },
+              {
+                "type": "REPEAT1",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "line_end"
+                }
+              }
+            ]
           },
           {
-            "type": "REPEAT1",
-            "content": {
-              "type": "SYMBOL",
-              "name": "line_end"
-            }
+            "type": "SEQ",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "line_end"
+              },
+              {
+                "type": "REPEAT1",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "line_end"
+                }
+              }
+            ]
           }
         ]
       }
@@ -134,31 +147,48 @@
           {
             "type": "SYMBOL",
             "name": "word"
+          },
+          {
+            "type": "SYMBOL",
+            "name": "puncuation"
+          },
+          {
+            "type": "SYMBOL",
+            "name": "symbols"
           }
         ]
       }
     },
     "_line": {
       "type": "PREC_RIGHT",
-      "value": 0,
+      "value": 2,
       "content": {
-        "type": "CHOICE",
+        "type": "SEQ",
         "members": [
           {
-            "type": "SYMBOL",
-            "name": "_line_content"
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "_line_content"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "line_break"
+              }
+            ]
           },
           {
-            "type": "SYMBOL",
-            "name": "line_break"
-          },
-          {
-            "type": "SYMBOL",
-            "name": "line_end"
-          },
-          {
-            "type": "SYMBOL",
-            "name": "puncuation"
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "line_end"
+              },
+              {
+                "type": "BLANK"
+              }
+            ]
           }
         ]
       }
@@ -177,6 +207,14 @@
         {
           "type": "SYMBOL",
           "name": "comma"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "question"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "exclamation"
         },
         {
           "type": "SYMBOL",
@@ -199,6 +237,14 @@
     "comma": {
       "type": "STRING",
       "value": ","
+    },
+    "exclamation": {
+      "type": "STRING",
+      "value": "!"
+    },
+    "question": {
+      "type": "STRING",
+      "value": "?"
     },
     "colon": {
       "type": "STRING",
@@ -228,6 +274,14 @@
     "double_quote": {
       "type": "STRING",
       "value": "\""
+    },
+    "symbols": {
+      "type": "PREC",
+      "value": -1,
+      "content": {
+        "type": "PATTERN",
+        "value": "[@#\\$%\\^\\&\\*\\(\\)_\\+\\=\\-/><~]"
+      }
     },
     "content": {
       "type": "PREC_RIGHT",

@@ -47,6 +47,10 @@
           "named": true
         },
         {
+          "type": "symbols",
+          "named": true
+        },
+        {
           "type": "word",
           "named": true
         }
@@ -246,6 +250,10 @@
           "named": true
         },
         {
+          "type": "symbols",
+          "named": true
+        },
+        {
           "type": "word",
           "named": true
         }
@@ -260,6 +268,10 @@
       "multiple": true,
       "required": true,
       "types": [
+        {
+          "type": "line_break",
+          "named": true
+        },
         {
           "type": "line_end",
           "named": true
@@ -284,7 +296,15 @@
           "named": true
         },
         {
+          "type": "exclamation",
+          "named": true
+        },
+        {
           "type": "period",
+          "named": true
+        },
+        {
+          "type": "question",
           "named": true
         },
         {
@@ -336,6 +356,11 @@
         }
       ]
     }
+  },
+  {
+    "type": "symbols",
+    "named": true,
+    "fields": {}
   },
   {
     "type": "  ",
@@ -395,11 +420,19 @@
     "named": true
   },
   {
+    "type": "exclamation",
+    "named": true
+  },
+  {
     "type": "line_end",
     "named": true
   },
   {
     "type": "period",
+    "named": true
+  },
+  {
+    "type": "question",
     "named": true
   },
   {

@@ -15,31 +15,52 @@ module.exports = grammar({
     comment: ($) => token(seq("<!--", /.*/, "-->")),
 
     _yaml: ($) => choice(),
-    paragraph: ($) =>
-      prec.right(seq(repeat1($._line), optional($.paragraph_end))),
+    paragraph: ($) => prec.right(3, seq(repeat1($._line), $.paragraph_end)),
     line_break: ($) =>
       prec.right(
+        2,
         choice(
           seq(token.immediate("\\"), $.line_end),
           seq(token.immediate("  "), $.line_end),
         ),
       ),
-    paragraph_end: ($) => prec.right(seq($.line_end, repeat1($.line_end))),
-    _line_content: ($) => repeat1(choice($.emph, $.word)), //prec(1, repeat1(choice($.word, $.whitespace))),
+    paragraph_end: ($) =>
+      prec.right(
+        4,
+        choice(
+          seq($.line_break, repeat1($.line_end)),
+          seq($.line_end, repeat1($.line_end)),
+        ),
+      ),
+    _line_content: ($) =>
+      repeat1(choice($.emph, $.word, $.puncuation, $.symbols)), //prec(1, repeat1(choice($.word, $.whitespace))),
     _line: ($) =>
       prec.right(
-        choice($._line_content, $.line_break, $.line_end, $.puncuation),
+        2,
+        seq(choice($._line_content, $.line_break), optional($.line_end)),
       ), //prec.right(seq($._line, optional($.line_end))),
     word: ($) => /[\p{L}\p{N}]+/,
     puncuation: ($) =>
-      choice($.period, $.comma, $.colon, $.semi_colon, $.quotation),
+      choice(
+        $.period,
+        $.comma,
+        $.question,
+        $.exclamation,
+        $.colon,
+        $.semi_colon,
+        $.quotation,
+      ),
     period: ($) => ".",
     comma: ($) => ",",
+    exclamation: ($) => "!",
+    question: ($) => "?",
     colon: ($) => ":",
     semi_colon: ($) => ";",
     quotation: ($) => choice($.single_quote, $.double_quote),
     single_quote: ($) => "'",
     double_quote: ($) => '"',
+    symbols: ($) => prec(-1, /[@#\$%\^\&\*\(\)_\+\=\-/><~]/),
+
     content: ($) => prec.right(repeat1($.paragraph)),
     _section: ($) =>
       prec.right(choice(seq($.heading, $.content), $.heading, $.content)),
@@ -65,6 +86,10 @@ module.exports = grammar({
         choice($.word, seq($.word, optional($._line), $.word)),
         $.emph_end,
       ),
+    // prec(
+    //   1,
+    //   ,
+    // ),
 
     // whitespace: ($) => /\s+/,
   },
