@@ -35,14 +35,65 @@ void tree_sitter_quarto_external_scanner_deserialize(void *payload, const char *
   }
 }
 
+static bool is_whitespace_next(TSLexer *lexer) {
+    if (lexer->lookahead == ' ' || lexer->lookahead == '\t' || lexer->lookahead == '\n') {
+        return true;
+    }
+    return false;
+}
+
+// advances the lexer until we find
+// another star that would be valid
+// closing star.
+// a result of true indicates the lexer
+// has just consumed that valid closing star
+//
+// a result of false indicates the lexer
+// failed to find a valid closing star.
+static bool find_end_star(TSLexer *lexer) {
+    fprintf(stderr, "finding end star\n");
+    uint8_t new_line_count = 0;
+    bool white_space_prior = false;
+    while (lexer->lookahead != '\0' && (lexer->lookahead != '*' || white_space_prior)) {
+        fprintf(stderr, "char: %c\n", lexer->lookahead);
+        white_space_prior = is_whitespace_next(lexer);
+        if (lexer->lookahead == '\n') {
+            new_line_count++;
+            if (new_line_count > 1) {
+                return false;
+            }
+        } else if (lexer->lookahead == '\\') {
+            // assuming that this is an emphasis block.
+            // advance and the next lexer->advance will
+            // treat it as a literal
+            lexer->advance(lexer, false);
+        }
+
+        lexer->advance(lexer, false);
+    }
+    // we know that this star is a valid closing symbol for our intial
+    // star.
+    // We do not mark the ending as this is a helper function. simply
+    // return true
+    if (lexer->lookahead == '*') {
+        // we have reached a star
+        lexer->advance(lexer, false);
+        return true;
+    }
+    return false;
+}
+
 bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, const bool *valid_symbols) {
   ScannerState *state = (ScannerState *)payload;
 
   // Skip whitespace
+  bool skipped_whitespace = false;
   while (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
+    skipped_whitespace = true;
     lexer->advance(lexer, true);
   }
 
+  fprintf(stderr, "scanner invoked... next char %c\n", lexer->lookahead);
   // Detect a newline
   if (lexer->lookahead == '\n' && valid_symbols[LINE_END]) {
     lexer->advance(lexer, false); // Consume the newline
@@ -52,41 +103,45 @@ bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, con
 
   // Detect emphasis start
   if (lexer->lookahead == '*' && valid_symbols[EMPHASIS_START] && !state->in_emphasis) {
+    // fprintf(stderr, "found a star to begin at... ");
     lexer->advance(lexer, false); // Consume the '*'
     lexer->mark_end(lexer); // this is potentially a emphasis start
-    if (lexer->lookahead == '*' | lexer->lookahead == ' ') {
+    if (lexer->lookahead == '*' || is_whitespace_next(lexer)) {
         // two stars back to back are not an emphasis
         // having space between a start and a word is not an valid emphasis
         return false;
     }
-    uint8_t new_line_count = 0;
-    while (lexer->lookahead != '*' && lexer->lookahead != '\0') {
-        if (lexer->lookahead == '\n') {
-            new_line_count++;
+    //advance the lexer
+    if (find_end_star(lexer)) {
+        // make sure the next symbol isn't another star
+        while (lexer->lookahead == '*') {
+            lexer->advance(lexer, true);
+            if (!find_end_star(lexer)) {
+                return false;
+            }
         }
-        if (new_line_count > 1) {
-            return false;
-        }
-        lexer->advance(lexer, false);
-    }
-    if (lexer->lookahead == '*') {
-        // advance the lexer until we see another star OR until
-        lexer->advance(lexer, false);
         lexer->result_symbol = EMPHASIS_START; // Emit the EMPHASIS_START token
         state->in_emphasis = true; // Update the state
         return true;
     }
-    lexer->result_symbol = EMPHASIS_START; // Emit the EMPHASIS_START token
-    state->in_emphasis = true; // Update the state
-    return true;
   }
 
   // Detect emphasis end
   if (lexer->lookahead == '*' && valid_symbols[EMPHASIS_END] && state->in_emphasis) {
-    lexer->advance(lexer, false); // Consume the '*'
-    lexer->result_symbol = EMPHASIS_END; // Emit the EMPHASIS_END token
-    state->in_emphasis = false; // Update the state
-    return true;
+    fprintf(stderr, "looking for end star, detected whitespace before %i\n", skipped_whitespace);
+    if (skipped_whitespace) {
+        return false;
+    }
+    lexer->advance(lexer, false);
+    if (lexer->lookahead == '*') {
+        return false;
+    } else {
+        lexer->mark_end(lexer);
+        lexer->result_symbol = EMPHASIS_END; // Emit the EMPHASIS_START token
+        state->in_emphasis = false; // Update the state
+        return true;
+    }
+
   }
 
   return false; // No token recognized

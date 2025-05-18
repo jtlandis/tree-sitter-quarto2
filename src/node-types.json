@@ -23,10 +23,6 @@
       "required": true,
       "types": [
         {
-          "type": "emph",
-          "named": true
-        },
-        {
           "type": "emph_end",
           "named": true
         },
@@ -40,6 +36,10 @@
         },
         {
           "type": "line_end",
+          "named": true
+        },
+        {
+          "type": "literal",
           "named": true
         },
         {
@@ -101,7 +101,27 @@
       "required": true,
       "types": [
         {
+          "type": "emph",
+          "named": true
+        },
+        {
+          "type": "line_break",
+          "named": true
+        },
+        {
           "type": "line_end",
+          "named": true
+        },
+        {
+          "type": "literal",
+          "named": true
+        },
+        {
+          "type": "puncuation",
+          "named": true
+        },
+        {
+          "type": "symbols",
           "named": true
         },
         {
@@ -120,7 +140,27 @@
       "required": true,
       "types": [
         {
+          "type": "emph",
+          "named": true
+        },
+        {
+          "type": "line_break",
+          "named": true
+        },
+        {
           "type": "line_end",
+          "named": true
+        },
+        {
+          "type": "literal",
+          "named": true
+        },
+        {
+          "type": "puncuation",
+          "named": true
+        },
+        {
+          "type": "symbols",
           "named": true
         },
         {
@@ -139,7 +179,27 @@
       "required": true,
       "types": [
         {
+          "type": "emph",
+          "named": true
+        },
+        {
+          "type": "line_break",
+          "named": true
+        },
+        {
           "type": "line_end",
+          "named": true
+        },
+        {
+          "type": "literal",
+          "named": true
+        },
+        {
+          "type": "puncuation",
+          "named": true
+        },
+        {
+          "type": "symbols",
           "named": true
         },
         {
@@ -158,7 +218,27 @@
       "required": true,
       "types": [
         {
+          "type": "emph",
+          "named": true
+        },
+        {
+          "type": "line_break",
+          "named": true
+        },
+        {
           "type": "line_end",
+          "named": true
+        },
+        {
+          "type": "literal",
+          "named": true
+        },
+        {
+          "type": "puncuation",
+          "named": true
+        },
+        {
+          "type": "symbols",
           "named": true
         },
         {
@@ -177,7 +257,27 @@
       "required": true,
       "types": [
         {
+          "type": "emph",
+          "named": true
+        },
+        {
+          "type": "line_break",
+          "named": true
+        },
+        {
           "type": "line_end",
+          "named": true
+        },
+        {
+          "type": "literal",
+          "named": true
+        },
+        {
+          "type": "puncuation",
+          "named": true
+        },
+        {
+          "type": "symbols",
           "named": true
         },
         {
@@ -196,7 +296,27 @@
       "required": true,
       "types": [
         {
+          "type": "emph",
+          "named": true
+        },
+        {
+          "type": "line_break",
+          "named": true
+        },
+        {
           "type": "line_end",
+          "named": true
+        },
+        {
+          "type": "literal",
+          "named": true
+        },
+        {
+          "type": "puncuation",
+          "named": true
+        },
+        {
+          "type": "symbols",
           "named": true
         },
         {
@@ -222,6 +342,11 @@
     }
   },
   {
+    "type": "literal",
+    "named": true,
+    "fields": {}
+  },
+  {
     "type": "paragraph",
     "named": true,
     "fields": {},
@@ -239,6 +364,10 @@
         },
         {
           "type": "line_end",
+          "named": true
+        },
+        {
+          "type": "literal",
           "named": true
         },
         {
@@ -268,10 +397,6 @@
       "multiple": true,
       "required": true,
       "types": [
-        {
-          "type": "line_break",
-          "named": true
-        },
         {
           "type": "line_end",
           "named": true

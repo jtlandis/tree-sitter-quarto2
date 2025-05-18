@@ -98,41 +98,11 @@
       "type": "PREC_RIGHT",
       "value": 4,
       "content": {
-        "type": "CHOICE",
-        "members": [
-          {
-            "type": "SEQ",
-            "members": [
-              {
-                "type": "SYMBOL",
-                "name": "line_break"
-              },
-              {
-                "type": "REPEAT1",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "line_end"
-                }
-              }
-            ]
-          },
-          {
-            "type": "SEQ",
-            "members": [
-              {
-                "type": "SYMBOL",
-                "name": "line_end"
-              },
-              {
-                "type": "REPEAT1",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "line_end"
-                }
-              }
-            ]
-          }
-        ]
+        "type": "REPEAT1",
+        "content": {
+          "type": "SYMBOL",
+          "name": "line_end"
+        }
       }
     },
     "_line_content": {
@@ -154,6 +124,10 @@
           },
           {
             "type": "SYMBOL",
+            "name": "literal"
+          },
+          {
+            "type": "SYMBOL",
             "name": "symbols"
           }
         ]
@@ -166,27 +140,19 @@
         "type": "SEQ",
         "members": [
           {
-            "type": "CHOICE",
-            "members": [
-              {
-                "type": "SYMBOL",
-                "name": "_line_content"
-              },
-              {
-                "type": "SYMBOL",
-                "name": "line_break"
-              }
-            ]
+            "type": "SYMBOL",
+            "name": "_line_content"
           },
           {
             "type": "CHOICE",
             "members": [
               {
                 "type": "SYMBOL",
-                "name": "line_end"
+                "name": "line_break"
               },
               {
-                "type": "BLANK"
+                "type": "SYMBOL",
+                "name": "line_end"
               }
             ]
           }
@@ -280,7 +246,15 @@
       "value": -1,
       "content": {
         "type": "PATTERN",
-        "value": "[@#\\$%\\^\\&\\*\\(\\)_\\+\\=\\-/><~]"
+        "value": "[@#\\$%\\^\\&\\*\\(\\)_\\+\\=\\-/><~\\\\]"
+      }
+    },
+    "literal": {
+      "type": "PREC",
+      "value": 10,
+      "content": {
+        "type": "PATTERN",
+        "value": "\\\\[@#\\$%\\^\\&\\*\\(\\)_\\+\\=\\-/><~\\\\]"
       }
     },
     "content": {
@@ -361,15 +335,8 @@
           "value": "#"
         },
         {
-          "type": "REPEAT",
-          "content": {
-            "type": "SYMBOL",
-            "name": "word"
-          }
-        },
-        {
           "type": "SYMBOL",
-          "name": "line_end"
+          "name": "_line"
         }
       ]
     },
@@ -381,15 +348,8 @@
           "value": "##"
         },
         {
-          "type": "REPEAT",
-          "content": {
-            "type": "SYMBOL",
-            "name": "word"
-          }
-        },
-        {
           "type": "SYMBOL",
-          "name": "line_end"
+          "name": "_line"
         }
       ]
     },
@@ -401,15 +361,8 @@
           "value": "###"
         },
         {
-          "type": "REPEAT",
-          "content": {
-            "type": "SYMBOL",
-            "name": "word"
-          }
-        },
-        {
           "type": "SYMBOL",
-          "name": "line_end"
+          "name": "_line"
         }
       ]
     },
@@ -421,15 +374,8 @@
           "value": "####"
         },
         {
-          "type": "REPEAT",
-          "content": {
-            "type": "SYMBOL",
-            "name": "word"
-          }
-        },
-        {
           "type": "SYMBOL",
-          "name": "line_end"
+          "name": "_line"
         }
       ]
     },
@@ -441,15 +387,8 @@
           "value": "#####"
         },
         {
-          "type": "REPEAT",
-          "content": {
-            "type": "SYMBOL",
-            "name": "word"
-          }
-        },
-        {
           "type": "SYMBOL",
-          "name": "line_end"
+          "name": "_line"
         }
       ]
     },
@@ -461,64 +400,80 @@
           "value": "######"
         },
         {
-          "type": "REPEAT",
-          "content": {
-            "type": "SYMBOL",
-            "name": "word"
-          }
-        },
-        {
           "type": "SYMBOL",
-          "name": "line_end"
+          "name": "_line"
         }
       ]
     },
     "emph": {
-      "type": "SEQ",
-      "members": [
-        {
-          "type": "SYMBOL",
-          "name": "emph_start"
-        },
-        {
-          "type": "CHOICE",
-          "members": [
-            {
-              "type": "SYMBOL",
-              "name": "word"
-            },
-            {
+      "type": "PREC",
+      "value": 2,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "SYMBOL",
+            "name": "emph_start"
+          },
+          {
+            "type": "REPEAT1",
+            "content": {
               "type": "SEQ",
               "members": [
                 {
-                  "type": "SYMBOL",
-                  "name": "word"
+                  "type": "REPEAT1",
+                  "content": {
+                    "type": "CHOICE",
+                    "members": [
+                      {
+                        "type": "SYMBOL",
+                        "name": "word"
+                      },
+                      {
+                        "type": "SYMBOL",
+                        "name": "puncuation"
+                      },
+                      {
+                        "type": "SYMBOL",
+                        "name": "literal"
+                      },
+                      {
+                        "type": "SYMBOL",
+                        "name": "symbols"
+                      }
+                    ]
+                  }
                 },
                 {
                   "type": "CHOICE",
                   "members": [
                     {
-                      "type": "SYMBOL",
-                      "name": "_line"
+                      "type": "CHOICE",
+                      "members": [
+                        {
+                          "type": "SYMBOL",
+                          "name": "line_break"
+                        },
+                        {
+                          "type": "SYMBOL",
+                          "name": "line_end"
+                        }
+                      ]
                     },
                     {
                       "type": "BLANK"
                     }
                   ]
-                },
-                {
-                  "type": "SYMBOL",
-                  "name": "word"
                 }
               ]
             }
-          ]
-        },
-        {
-          "type": "SYMBOL",
-          "name": "emph_end"
-        }
-      ]
+          },
+          {
+            "type": "SYMBOL",
+            "name": "emph_end"
+          }
+        ]
+      }
     }
   },
   "extras": [
@@ -531,7 +486,11 @@
       "name": "comment"
     }
   ],
-  "conflicts": [],
+  "conflicts": [
+    [
+      "emph"
+    ]
+  ],
   "precedences": [],
   "externals": [
     {
