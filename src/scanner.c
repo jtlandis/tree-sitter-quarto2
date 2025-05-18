@@ -51,11 +51,11 @@ static bool is_whitespace_next(TSLexer *lexer) {
 // a result of false indicates the lexer
 // failed to find a valid closing star.
 static bool find_end_star(TSLexer *lexer) {
-    fprintf(stderr, "finding end star\n");
+    // fprintf(stderr, "finding end star\n");
     uint8_t new_line_count = 0;
     bool white_space_prior = false;
     while (lexer->lookahead != '\0' && (lexer->lookahead != '*' || white_space_prior)) {
-        fprintf(stderr, "char: %c\n", lexer->lookahead);
+        // fprintf(stderr, "char: %c\n", lexer->lookahead);
         white_space_prior = is_whitespace_next(lexer);
         if (lexer->lookahead == '\n') {
             new_line_count++;
@@ -93,7 +93,7 @@ bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, con
     lexer->advance(lexer, true);
   }
 
-  fprintf(stderr, "scanner invoked... next char %c\n", lexer->lookahead);
+  // fprintf(stderr, "scanner invoked... next char %c\n", lexer->lookahead);
   // Detect a newline
   if (lexer->lookahead == '\n' && valid_symbols[LINE_END]) {
     lexer->advance(lexer, false); // Consume the newline
@@ -128,7 +128,7 @@ bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, con
 
   // Detect emphasis end
   if (lexer->lookahead == '*' && valid_symbols[EMPHASIS_END] && state->in_emphasis) {
-    fprintf(stderr, "looking for end star, detected whitespace before %i\n", skipped_whitespace);
+    // fprintf(stderr, "looking for end star, detected whitespace before %i\n", skipped_whitespace);
     if (skipped_whitespace) {
         return false;
     }
