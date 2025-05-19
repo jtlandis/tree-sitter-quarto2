@@ -161,7 +161,7 @@
     },
     "word": {
       "type": "PATTERN",
-      "value": "[\\p{L}\\p{N}]+"
+      "value": "[\\p{L}\\p{N}]+[\\p{L}\\p{N}_]*"
     },
     "puncuation": {
       "type": "CHOICE",
@@ -416,7 +416,7 @@
             "name": "emph_start"
           },
           {
-            "type": "REPEAT1",
+            "type": "REPEAT",
             "content": {
               "type": "SEQ",
               "members": [
@@ -467,6 +467,27 @@
                 }
               ]
             }
+          },
+          {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "word"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "puncuation"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "literal"
+              },
+              {
+                "type": "PATTERN",
+                "value": "[\\[\\]\\\\#\\$\\^\\&\\(\\)\\+\\=\\-/><]"
+              }
+            ]
           },
           {
             "type": "SYMBOL",

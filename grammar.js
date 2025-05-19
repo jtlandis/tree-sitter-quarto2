@@ -37,7 +37,7 @@ module.exports = grammar({
       repeat1(choice($.emph, $.word, $.puncuation, $.literal, $.symbols)), //, $.whitespace)), //prec(1, repeat1(choice($.word, $.whitespace))),
     _line: ($) =>
       prec.right(2, seq($._line_content, choice($.line_break, $.line_end))), //prec.right(seq($._line, optional($.line_end))),
-    word: ($) => /[\p{L}\p{N}]+/,
+    word: ($) => /[\p{L}\p{N}]+[\p{L}\p{N}_]*/,
     puncuation: ($) =>
       choice(
         $.period,
@@ -83,11 +83,18 @@ module.exports = grammar({
         2,
         seq(
           $.emph_start,
-          repeat1(
+          repeat(
             seq(
               repeat1(choice($.word, $.puncuation, $.literal, $.symbols)),
               optional(choice($.line_break, $.line_end)),
             ),
+          ),
+          // /[@#\$%\^\&\*\(\)_\+\=\-/><~\\]/
+          choice(
+            $.word,
+            $.puncuation,
+            $.literal,
+            /[\[\]\\#\$\^\&\(\)\+\=\-/><]/,
           ),
           // seq(
           //   repeat1(choice($.word, $.puncuation, $.symbols)),
@@ -109,11 +116,11 @@ module.exports = grammar({
           $.emph_end,
         ),
       ),
-    // prec(
-    //   1,
-    //   ,
-    // ),
-    // whitespace: ($) => /\s+/,
+    // syntax: ($) => choice($.star, $.underscore, $.carrot, $.tilde),
+    // star: ($) => "*",
+    // underscore: ($) => "_",
+    // carrot: ($) => "^",
+    // tilde: ($) => "~",
   },
 
   conflicts: ($) => [
