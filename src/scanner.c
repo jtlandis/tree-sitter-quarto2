@@ -148,6 +148,9 @@ bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, con
       ((lexer->lookahead == '*' && valid_symbols[EMPHASIS_STAR_START]) ||
           (lexer->lookahead == '_' && valid_symbols[EMPHASIS_UNDER_START]))) {
 
+    if (valid_symbols[EMPHASIS_UNDER_START] && !skipped_whitespace) {
+        return false;
+    }
     int32_t emph_char = lexer->lookahead;
     fprintf(stderr, "found a %c to begin at emphasis\n", emph_char);
     lexer->advance(lexer, false); // Consume the '*'
@@ -187,7 +190,9 @@ bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, con
         return false;
     }
     lexer->advance(lexer, false);
-    if (lexer->lookahead == emph_char) {
+    if (lexer->lookahead == emph_char || (
+        valid_symbols[EMPHASIS_UNDER_END] && !is_whitespace_next(lexer)
+    )) {
         return false;
     } else {
         lexer->mark_end(lexer);
