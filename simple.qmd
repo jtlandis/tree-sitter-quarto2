@@ -1,6 +1,6 @@
 # Title text
 
-This is *some* text
+This *is **some* text
 but we are still continuing
 Line break occured here.
 

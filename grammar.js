@@ -7,7 +7,7 @@ module.exports = grammar({
     $.comment,
   ],
 
-  externals: ($) => [$.line_end, $.emph_start, $.emph_end],
+  externals: ($) => [$.line_end, $.emph_start, $.emph_end, $._unused_error],
 
   rules: {
     source_file: ($) => repeat($._section),
@@ -58,7 +58,7 @@ module.exports = grammar({
     single_quote: ($) => "'",
     double_quote: ($) => '"',
     symbols: ($) => prec(-1, /[@#\$%\^\&\*\(\)_\+\=\-/><~\\]/),
-    literal: ($) => prec(10, /\\[@#\$%\^\&\*\(\)_\+\=\-/><~\\]/),
+    literal: ($) => prec(10, /\\[@#\$%\^\&\*\(\)_\+\=\-/><~\\ ]/),
     content: ($) => prec.right(repeat1($.paragraph)),
     _section: ($) =>
       prec.right(choice(seq($.heading, $.content), $.heading, $.content)),
@@ -83,39 +83,16 @@ module.exports = grammar({
         2,
         seq(
           $.emph_start,
-          repeat(
-            seq(
-              repeat1(choice($.word, $.puncuation, $.literal, $.symbols)),
-              optional(choice($.line_break, $.line_end)),
-            ),
-          ),
-          // /[@#\$%\^\&\*\(\)_\+\=\-/><~\\]/
-          choice(
-            $.word,
-            $.puncuation,
-            $.literal,
-            /[\[\]\\#\$\^\&\(\)\+\=\-/><]/,
-          ),
-          // seq(
-          //   repeat1(choice($.word, $.puncuation, $.symbols)),
-          //   optional(
-          //     seq(
-          //       optional(
-          //         seq(
-          //           repeat1(
-          //             choice($.whitespace, $.word, $.puncuation, $.symbols),
-          //           ),
-          //           optional(choice($.line_break, $.line_end)),
-          //         ),
-          //       ),
-          //       repeat1(choice($.word, $.puncuation, $.symbols)),
-          //     ),
-          //   ),
-          // ),
-
+          $._emph_star_content,
           $.emph_end,
         ),
       ),
+    _emph_star_content: ($) => repeat1(
+      seq(
+        repeat1(choice($.word, $.puncuation, $.literal, $.symbols)),
+        optional(choice($.line_break, $.line_end)),
+      ),
+    )
     // syntax: ($) => choice($.star, $.underscore, $.carrot, $.tilde),
     // star: ($) => "*",
     // underscore: ($) => "_",

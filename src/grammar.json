@@ -254,7 +254,7 @@
       "value": 10,
       "content": {
         "type": "PATTERN",
-        "value": "\\\\[@#\\$%\\^\\&\\*\\(\\)_\\+\\=\\-/><~\\\\]"
+        "value": "\\\\[@#\\$%\\^\\&\\*\\(\\)_\\+\\=\\-/><~\\\\ ]"
       }
     },
     "content": {
@@ -416,7 +416,7 @@
             "name": "emph_start"
           },
           {
-            "type": "REPEAT",
+            "type": "REPEAT1",
             "content": {
               "type": "SEQ",
               "members": [
@@ -469,27 +469,6 @@
             }
           },
           {
-            "type": "CHOICE",
-            "members": [
-              {
-                "type": "SYMBOL",
-                "name": "word"
-              },
-              {
-                "type": "SYMBOL",
-                "name": "puncuation"
-              },
-              {
-                "type": "SYMBOL",
-                "name": "literal"
-              },
-              {
-                "type": "PATTERN",
-                "value": "[\\[\\]\\\\#\\$\\^\\&\\(\\)\\+\\=\\-/><]"
-              }
-            ]
-          },
-          {
             "type": "SYMBOL",
             "name": "emph_end"
           }
@@ -525,6 +504,10 @@
     {
       "type": "SYMBOL",
       "name": "emph_end"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_unused_error"
     }
   ],
   "inline": [],
