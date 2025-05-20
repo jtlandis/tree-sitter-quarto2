@@ -7,7 +7,14 @@ module.exports = grammar({
     $.comment,
   ],
 
-  externals: ($) => [$.line_end, $.emph_start, $.emph_end, $._unused_error],
+  externals: ($) => [
+    $.line_end,
+    $._emph_star_start,
+    $._emph_star_end,
+    $._emph_under_start,
+    $._emph_under_end,
+    $._unused_error,
+  ],
 
   rules: {
     source_file: ($) => repeat($._section),
@@ -37,7 +44,7 @@ module.exports = grammar({
       repeat1(choice($.emph, $.word, $.puncuation, $.literal, $.symbols)), //, $.whitespace)), //prec(1, repeat1(choice($.word, $.whitespace))),
     _line: ($) =>
       prec.right(2, seq($._line_content, choice($.line_break, $.line_end))), //prec.right(seq($._line, optional($.line_end))),
-    word: ($) => /[\p{L}\p{N}]+[\p{L}\p{N}_]*/,
+    word: ($) => /[\p{L}\p{N}]+/,
     puncuation: ($) =>
       choice(
         $.period,
@@ -78,21 +85,28 @@ module.exports = grammar({
     heading_5: ($) => seq("#####", $._line),
     heading_6: ($) => seq("######", $._line),
 
-    emph: ($) =>
-      prec(
-        2,
-        seq(
-          $.emph_start,
-          $._emph_star_content,
-          $.emph_end,
+    emph: ($) => choice(prec(2, $._emph_star), prec(2, $._emph_under)),
+    _emph_star: ($) =>
+      seq(
+        alias($._emph_star_start, $.emph_start),
+        $._emph_content,
+        alias($._emph_star_end, $.emph_end),
+      ),
+    _emph_under: ($) =>
+      seq(
+        alias($._emph_under_start, $.emph_start),
+        $._emph_content,
+        alias($._emph_under_end, $.emph_end),
+      ),
+    _emph_content: ($) =>
+      prec.right(
+        repeat1(
+          seq(
+            repeat1(choice($.word, $.puncuation, $.literal, $.symbols)),
+            optional(choice($.line_break, $.line_end)),
+          ),
         ),
       ),
-    _emph_star_content: ($) => repeat1(
-      seq(
-        repeat1(choice($.word, $.puncuation, $.literal, $.symbols)),
-        optional(choice($.line_break, $.line_end)),
-      ),
-    )
     // syntax: ($) => choice($.star, $.underscore, $.carrot, $.tilde),
     // star: ($) => "*",
     // underscore: ($) => "_",
@@ -101,7 +115,7 @@ module.exports = grammar({
   },
 
   conflicts: ($) => [
-    [$.emph],
+    [$._emph_content],
     // [$.paragraph],
     // [$.paragraph, $.line],
     // [$.paragraph, $.word],
