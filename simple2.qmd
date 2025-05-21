@@ -1,4 +1,4 @@
 # title
 
-simple _th_ings_ g
+simple *thi tngs `@* g
 on new line!

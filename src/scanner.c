@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <unicode/uchar.h>
 #include <tree_sitter/parser.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -100,7 +101,7 @@ static bool is_whitespace_next(TSLexer *lexer) {
 }
 
 static bool is_static_at_symbol(TSLexer *lexer, int32_t current_char) {
-    return lexer->lookahead == '@' && is_whitespace(current_char);
+    return lexer->lookahead == '@' && !u_isalpha((UChar32)current_char);
 }
 
 static bool valid_prior_emph_end(TSLexer *lexer, int32_t current_char, int32_t emph_char, bool *in_citation) {
@@ -121,6 +122,13 @@ static bool valid_prior_emph_end(TSLexer *lexer, int32_t current_char, int32_t e
     return true;
 }
 
+static int32_t other_emphasis(int32_t char_) {
+    if (char_=='*') {
+        return '_';
+    }
+    return '*';
+}
+
 // advances the lexer until we find
 // another star that would be valid
 // closing star.
@@ -130,45 +138,146 @@ static bool valid_prior_emph_end(TSLexer *lexer, int32_t current_char, int32_t e
 // a result of false indicates the lexer
 // failed to find a valid closing star.
 static bool find_end_emph(TSLexer *lexer, int32_t char_, WithinRange *range) {
-    fprintf(stderr, "finding end star\n");
+    fprintf(stderr, "finding end %c\n", char_);
+    uint8_t char_count = 1;
+    while (lexer->lookahead == char_) {
+        lexer->advance(lexer, false);
+        char_count++;
+    }
+    // this function is for finding a SINGLE emphasis token
+    // however if we detect excatly 2, there is no way to
+    // split them down the line
+    if (char_count==2) {
+        return false;
+    }
+    uint8_t prior_char_count = char_count;
+    if (char_count>3) {
+        // this will invalidate the next three
+        // attempts to find any kind of '*' or '_' pattern.
+        // should do something to the scanner state
+        return false;
+    }
     uint8_t new_line_count = 0;
     uint32_t row = 0;
     uint32_t col = 0;
+    int32_t other_char = other_emphasis(char_);
+    int32_t other_char_count = 0;
+    while(lexer->lookahead == other_char) {
+        other_char_count++;
+        col++;
+        lexer->advance(lexer, false);
+    }
+    // this is immediately after char_
+    // and if whitespace follows the other
+    // emphasis symbol, this doesnt necessarily
+    // invalidate char_ empahsis
+    if (is_whitespace_next(lexer)) {
+        other_char_count = 0;
+    }
+
     bool valid_prior_char = true;
     int32_t current_char = char_;
     bool in_citation = false;
+    // StrongRange strong = new_strong_range();
     while (lexer->lookahead != '\0' &&
-        (lexer->lookahead != char_ || !valid_prior_char)) {
+        (lexer->lookahead != char_ && char_count == 1 )) {
             // fprintf(stderr, "target_char: %c - current_char: %c - next char: %c - valid_prior: %i - in_citation: %i",
             //     char_, current_char, lexer->lookahead, valid_prior_char, in_citation);
-        // marks the next character to be valid or invalid
-        // if the prior char is marked invalid and the lookahead
-        // is a '*', then we continue the loop.
-        valid_prior_char = valid_prior_emph_end(lexer, current_char, char_, &in_citation);
-        if (lexer->lookahead == '\n') {
-            new_line_count++;
-            row++;
-            col = 0;
-            if (new_line_count > 1) {
-                return false;
-            }
-        } else if (lexer->lookahead == '\\') {
-            // assuming that this is an emphasis block.
-            // advance and the next lexer->advance will
-            // treat it as a literal. Note that '\\' is
-            // a valid prior char and thus anyting we
-            // move past will be considered valid.
-            col++;
-            lexer->advance(lexer, false);
+        switch (lexer->lookahead) {
+            case '*':
+            case '_':
+                if (lexer->lookahead == char_) {
+                    // we only reach this branch if char_count == 3
+                    // and lookahead is our specified char.
+                    char_count--;
+                    col++;
+                    lexer->advance(lexer, false);
+                    // we must be able to decrement twice
+                    if (lexer->lookahead != char_) {
+                        return false;
+                    }
+                    char_count--;
+                    // let the loop run as normal
+                    // it will escape
+                } else {
+                    if (other_char_count==0) {
+                        while(lexer->lookahead == other_char) {
+                            other_char_count++;
+                            col++;
+                            lexer->advance(lexer, false);
+                        }
+                        // next symbol MUST be a character
+                        if (is_whitespace_next(lexer) || other_char_count > 3) {
+                            other_char_count = 0;
+                        }
+                    } else {
+                        int32_t prior_count = other_char_count;
+                        while(lexer->lookahead == other_char && other_char_count > 0) {
+                            other_char_count--;
+                            col++;
+                            lexer->advance(lexer, false);
+                        }
+                        if (prior_count == 2 && other_char_count != 0) {
+                            return false;
+                        }
+                        if (other_char_count == 0 && lexer->lookahead == other_char) {
+                            // we have a trailing symbol with no whitespace
+                            return false;
+                        }
+                        if (other_char=='_' && !is_whitespace_next(lexer)) {
+                            // underscores could be used interword
+                            return false;
+                        }
+                        // // next symbol MUST be a character
+                        // if (!u_isalnum((UChar32)lexer->lookahead)) {
+                        //     // we have detected the other emphasis
+                        //     // and it has an invalid start...
+                        //     return false;
+                        // }
+                    }
+                }
+
+                break;
+            case '\n':
+                new_line_count++;
+                row++;
+                col = 0;
+                if (new_line_count > 1) {
+                    return false;
+                }
+                break;
+            case '\\':
+                // assuming that this is an emphasis block.
+                // advance and the next lexer->advance will
+                // treat it as a literal. Note that '\\' is
+                // a valid prior char and thus anyting we
+                // move past will be considered valid.
+                col++;
+                lexer->advance(lexer, false);
+                break;
         }
+        // if (lexer->lookahead == char_) {
+        //     char_count--;
+        // }
+        // // valid_prior_char = valid_prior_emph_end(lexer, current_char, char_, &in_citation);
+        // if (lexer->lookahead == '\n') {
+
+        // } else if (lexer->lookahead == '\\') {
+
+        // }
         current_char = lexer->lookahead;
         col++;
         lexer->advance(lexer, false);
     }
-    // we know that this star is a valid closing symbol for our intial
-    // star.
-    // We do not mark the ending as this is a helper function. simply
-    // return true
+    // we know that this next symbol is valid for an emphasis.
+    // if any other scans is still open, this may be invalid
+    if (other_char_count) {
+        return false;
+    }
+
+    // We do not mark the ending as this is a helper function for the
+    // Start symbol which was already marked.
+    // simply return true and update the range
     if (lexer->lookahead == char_) {
         // we have reached a valid emphasis
         if (row == 0) {
@@ -187,7 +296,7 @@ static bool find_end_emph(TSLexer *lexer, int32_t char_, WithinRange *range) {
 bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, const bool *valid_symbols) {
   ScannerState *state = (ScannerState *)payload;
   print_scanner_state(state);
-  fprintf(stderr, "scanner invoked before: %c\n", lexer->lookahead);
+  fprintf(stderr, "scanner invoked before: %c - is alpha: %i\n", lexer->lookahead, u_isalpha((UChar32)lexer->lookahead));
   if (valid_symbols[ERROR]) {
       fprintf(stderr, "ERROR is a valid symbol\n");
       return false;
@@ -224,7 +333,7 @@ bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, con
     fprintf(stderr, "found a %c to begin at emphasis\n", emph_char);
     lexer->advance(lexer, false); // Consume the '*'
     lexer->mark_end(lexer); // this is potentially a emphasis start
-    if (lexer->lookahead == emph_char || is_whitespace_next(lexer)) {
+    if (is_whitespace_next(lexer)) {
         // two stars back to back are not an emphasis
         // having space between a start and a word is not an valid emphasis
         return false;
