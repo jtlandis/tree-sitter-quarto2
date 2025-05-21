@@ -25,63 +25,6 @@ typedef struct {
   uint32_t col;
 } WithinRange;
 
-// typedef struct {
-//     WithinRange range;
-//     enum EmphType symbol;
-//     bool open;
-//     uint8_t close_count;
-//     void (*lookahead)(struct StrongRange* self, TSLexer *lexer);
-// } StrongRange;
-
-// static void strong_range_lookahead_impl(StrongRange* self, TSLexer *lexer) {
-
-//     if (!self->open) {
-//         switch (self->symbol) {
-//             case NONE:
-//                 // we are looking for emphasis markers
-//                 switch (lexer->lookahead) {
-//                     case '*':
-//                         self->symbol = STAR;
-//                         break;
-//                     case '_':
-//                         self->symbol = UNDERSCORE;
-//                         break;
-//                     default:
-//                         break;
-//                 }
-//                 break;
-//             case STAR:
-//             switch (lexer->lookahead) {
-//                 case '*':
-//                     self->open = true;
-//                     break;
-//                 default:
-//                     self->symbol = NONE;
-//                     break;
-//             }
-//             break;
-//             case UNDERSCORE:
-//             switch (lexer->lookahead) {
-//                 case '_':
-//                     self->open = true;
-//                     break;
-//                 default:
-//                     self->symbol = NONE;
-//                     break;
-//             }
-//         }
-//     } else {
-//         switch (self->symbol) {
-//             case STAR:
-//               if (lexer->lookahead == '*') {
-//                   self->close_count++;
-//               } else {
-
-//               }
-
-//         }
-//     }
-// }
 
 static WithinRange new_range() {
     WithinRange obj;
@@ -91,12 +34,7 @@ static WithinRange new_range() {
     return obj;
 }
 
-// static StrongRange new_strong_range() {
-//     StrongRange obj;
-//     obj.range = new_range();
-//     obj.symbol = NONE;
-//     obj.open = false;
-// }
+
 
 typedef struct {
   WithinRange emphasis; // State to track if we're inside an emphasis block
