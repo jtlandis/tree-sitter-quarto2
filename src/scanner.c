@@ -1,9 +1,9 @@
 #include <stdint.h>
-#include <unicode/uchar.h>
 #include <tree_sitter/parser.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 
 enum TokenType {
   LINE_END,        // Token type for line_end
@@ -100,27 +100,27 @@ static bool is_whitespace_next(TSLexer *lexer) {
     return is_whitespace(lexer->lookahead);
 }
 
-static bool is_static_at_symbol(TSLexer *lexer, int32_t current_char) {
-    return lexer->lookahead == '@' && !u_isalpha((UChar32)current_char);
-}
+// static bool is_static_at_symbol(TSLexer *lexer, int32_t current_char) {
+//     return lexer->lookahead == '@' && !u_isalpha((UChar32)current_char);
+// }
 
-static bool valid_prior_emph_end(TSLexer *lexer, int32_t current_char, int32_t emph_char, bool *in_citation) {
-    bool whitespace_next = is_whitespace_next(lexer);
-    bool detect_at_symbol = emph_char == '_' && is_static_at_symbol(lexer, current_char);
-    if (whitespace_next) {
-        *in_citation = false;
-    } else if (detect_at_symbol) {
-        *in_citation = true;
-    }
-    if (whitespace_next ||  *in_citation ||
-        lexer->lookahead == '_' ||
-        lexer->lookahead == '*') {
+// static bool valid_prior_emph_end(TSLexer *lexer, int32_t current_char, int32_t emph_char, bool *in_citation) {
+//     bool whitespace_next = is_whitespace_next(lexer);
+//     bool detect_at_symbol = emph_char == '_' && is_static_at_symbol(lexer, current_char);
+//     if (whitespace_next) {
+//         *in_citation = false;
+//     } else if (detect_at_symbol) {
+//         *in_citation = true;
+//     }
+//     if (whitespace_next ||  *in_citation ||
+//         lexer->lookahead == '_' ||
+//         lexer->lookahead == '*') {
 
-        return false;
-    }
+//         return false;
+//     }
 
-    return true;
-}
+//     return true;
+// }
 
 static int32_t other_emphasis(int32_t char_) {
     if (char_=='*') {
@@ -128,6 +128,20 @@ static int32_t other_emphasis(int32_t char_) {
     }
     return '*';
 }
+
+typedef struct {
+    uint8_t emph_star;
+    uint8_t emph_under;
+    uint8_t strong_star;
+    uint8_t strong_under;
+    uint8_t strong_emph_star;
+    uint8_t strong_emph_under;
+    uint8_t superscript;
+    uint8_t subscript;
+    uint8_t strikethrough;
+    uint8_t Reference;
+    uint8_t span;
+} Queue;
 
 // advances the lexer until we find
 // another star that would be valid
@@ -150,7 +164,6 @@ static bool find_end_emph(TSLexer *lexer, int32_t char_, WithinRange *range) {
     if (char_count==2) {
         return false;
     }
-    uint8_t prior_char_count = char_count;
     if (char_count>3) {
         // this will invalidate the next three
         // attempts to find any kind of '*' or '_' pattern.
@@ -175,19 +188,71 @@ static bool find_end_emph(TSLexer *lexer, int32_t char_, WithinRange *range) {
         other_char_count = 0;
     }
 
-    bool valid_prior_char = true;
-    int32_t current_char = char_;
+    // assume the prior character is whitespace.
+    int32_t current_char = ' ';
     bool in_citation = false;
     // StrongRange strong = new_strong_range();
     while (lexer->lookahead != '\0' &&
-        (lexer->lookahead != char_ && char_count == 1 )) {
+           // lexer->lookahead != char_ &&
+           char_count > 0 ) {
             // fprintf(stderr, "target_char: %c - current_char: %c - next char: %c - valid_prior: %i - in_citation: %i",
             //     char_, current_char, lexer->lookahead, valid_prior_char, in_citation);
         switch (lexer->lookahead) {
+            case '@':
+               if (is_whitespace(current_char)) {
+
+               }
             case '*':
             case '_':
                 if (lexer->lookahead == char_) {
                     // we only reach this branch if char_count == 3
+                    // or == 1
+                    uint8_t char_consumed = 0;
+                    while(lexer->lookahead == char_) {
+                        char_consumed++;
+                        col++;
+                        lexer->advance(lexer, false);
+                    }
+                    switch (char_count) {
+                        case 1:
+                          if (char_consumed == 1) {
+                              char_count = 0;
+                              continue;
+                          }
+                          if (char_consumed == 2) {
+                              char_count += 2;
+                              continue;
+                          }
+                          if (char_consumed > 2) {
+                              char_count = 0;
+                              char_consumed--;
+                              col -= char_consumed;
+                              continue;
+                          }
+                          break;
+                        case 3:
+                          if (char_consumed > 2) {
+                              char_count = 1;
+                              continue;
+                          }
+                          // decrementing by 2 would be the only valid
+                          // way for emphasis.
+                          return false;
+                          break;
+                    } 
+                    if (3 == char_count + char_consumed) {
+                        char_count = 3;
+                        continue;
+                    } else if ()
+                    if (char_consumed == char_count) {
+                        // we have found our end point
+                        char_count = 0;
+                        continue;
+                    }
+                    if (char_consumed > 3) {
+                        continue;
+                    }
+                    char_count
                     // and lookahead is our specified char.
                     char_count--;
                     col++;
@@ -296,7 +361,7 @@ static bool find_end_emph(TSLexer *lexer, int32_t char_, WithinRange *range) {
 bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, const bool *valid_symbols) {
   ScannerState *state = (ScannerState *)payload;
   print_scanner_state(state);
-  fprintf(stderr, "scanner invoked before: %c - is alpha: %i\n", lexer->lookahead, u_isalpha((UChar32)lexer->lookahead));
+  fprintf(stderr, "scanner invoked before: %c - is alpha: %i\n", lexer->lookahead, isalnum((int)lexer->lookahead));
   if (valid_symbols[ERROR]) {
       fprintf(stderr, "ERROR is a valid symbol\n");
       return false;
