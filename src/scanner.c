@@ -1,5 +1,6 @@
 #include <stdint.h>
-#include <tree_sitter/parser.h>
+#include "tree_sitter/parser.h"
+#include "tree_sitter/array.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -12,6 +13,13 @@ enum TokenType {
   EMPHASIS_UNDER_START,
   EMPHASIS_UNDER_END,
   ERROR, //General Emphasis
+};
+
+enum ParseToken {
+    NONE,
+    EMPHASIS_STAR,
+    EMPHASIS_UNDER,
+    STRONG_STAR,
 };
 
 // this struct is for emphasis
@@ -408,7 +416,7 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
         lex_advance(wrapper, false);
         lookahead = lex_lookahead(wrapper);
     }
-
+    
     return res;
 
 }
