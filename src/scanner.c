@@ -5,6 +5,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
+#include <stddef.h>
+
+size_t not_found = SIZE_MAX;
 
 enum TokenType {
   LINE_END,        // Token type for line_end
@@ -12,6 +15,8 @@ enum TokenType {
   EMPHASIS_STAR_END,     // Token type for emphasis_end
   EMPHASIS_UNDER_START,
   EMPHASIS_UNDER_END,
+  STRONG_STAR_START,
+  STRONG_STAR_END,
   ERROR, //General Emphasis
 };
 
@@ -21,6 +26,8 @@ enum ParseToken {
     EMPHASIS_UNDER,
     STRONG_STAR,
 };
+
+
 
 // this struct is for emphasis
 // strong, and strong_emphasis
@@ -34,18 +41,37 @@ typedef struct {
   uint32_t col;
 } WithinRange;
 
+typedef struct Pos {
+    uint32_t row;
+    uint32_t col;
+} Pos;
+
+typedef struct Range {
+    Pos start;
+    Pos end;
+} Range;
+
+enum RangeType {
+    DISJOINT_LESS,
+    OVERLAP,
+    CHILD,
+    PARENT,
+    DISJOINT_GREATER
+};
 
 typedef struct LexWrap {
     TSLexer *lexer;
+    Pos init_pos;
     uint32_t pos;
     Array(int32_t) buffer;
     Array(uint32_t) new_line_loc;
 } LexWrap;
 
 
-static LexWrap new_lexer(TSLexer *lexer) {
+static LexWrap new_lexer(TSLexer *lexer, Pos init_pos) {
     LexWrap obj;
     obj.lexer = lexer;
+    obj.init_pos = init_pos;
     obj.pos = 0;
     array_init(&obj.buffer);
     array_init(&obj.new_line_loc);
@@ -78,16 +104,21 @@ static void lex_backtrack_n(LexWrap* wrapper, uint32_t n) {
     wrapper->pos -= n;
 }
 
-typedef struct Pos {
-    uint32_t row;
-    uint32_t col;
-} Pos;
+
 
 static Pos new_position(uint32_t row, uint32_t col) {
     Pos obj;
     obj.row = row;
     obj.col = col;
     return obj;
+}
+
+static bool pos_eq(Pos *x, Pos *y) {
+    return (x->row == y->row) && (x->col == y->col);
+}
+
+static bool pos_ne(Pos *x, Pos *y) {
+    return (x->row != y->row) || (x->col != y->col);
 }
 
 /// x < y
@@ -108,16 +139,18 @@ static bool pos_ge(Pos *x, Pos *y) {
     return x->row >= y->row && x->col >= y->col;
 }
 
-static Pos lex_current_range(LexWrap *wrapper) {
-    Pos range = new_position(0, wrapper->pos);
+static Pos lex_current_position(LexWrap *wrapper) {
+    Pos range = new_position(wrapper->init_pos.row, wrapper->init_pos.col + wrapper->pos);
     if (wrapper->new_line_loc.size > 0) {
-        uint32_t diff = 0;
+        uint32_t diff;
+        uint32_t last_index = 0;
         uint32_t i = 0;
         uint32_t line_index = *array_get(&wrapper->new_line_loc, i);
         while(line_index < wrapper->pos
             && i < wrapper->new_line_loc.size) {
-            range.row = i;
-            diff = line_index - diff;
+            range.row++;
+            diff = line_index - last_index;
+            last_index = line_index;
             i++;
             line_index = *array_get(&wrapper->new_line_loc, i);
             range.col -= diff;
@@ -129,50 +162,164 @@ static Pos lex_current_range(LexWrap *wrapper) {
 typedef struct ParseResult {
     bool success;
     uint32_t length;
-    Pos start;
-    Pos end;
+    Range range;
     enum ParseToken token;
 } ParseResult;
+
+static Range new_range(Pos start, Pos end) {
+    Range obj;
+    obj.start = start;
+    obj.end = end;
+    return obj;
+}
 
 static ParseResult new_parse_result() {
     ParseResult obj;
     obj.success = false;
     obj.length = 0;
-    obj.start = new_position(0, 0);
-    obj.end = new_position(0, 0);
+    obj.range = new_range(new_position(0, 0), new_position(0, 0));
     obj.token = NONE;
     return obj;
 }
 
 typedef Array(ParseResult) ParseResultArray;
+typedef Array(uint32_t) IndexArray;
+
+/// x:   |----|
+/// y:  |-------|
+static bool range_within(Range *x, Range *y) {
+    return pos_gt(&x->end, &y->start) && pos_lt(&x->start, &y->end);
+}
+
+/// x: |---|
+/// y:       |----|
+static bool range_disjoint(Range *x, Range *y) {
+    return pos_ge(&y->start, &x->end) ||  pos_ge(&x->start, &y->end);
+}
+
+static enum RangeType classify_range(Range *x, Range *y) {
+    // |----|
+    //        |----|
+
+    if (pos_le(&x->end, &y->start)) {
+        return DISJOINT_LESS;
+    }
+    if (pos_lt(&x->end, &y->end)) {
+        if (pos_gt(&x->start, &y->start)) {
+            return CHILD;
+        } else {
+            return OVERLAP;
+        }
+    } else {
+        if (pos_lt(&x->start, &y->start)) {
+            return PARENT;
+        }
+
+        if (pos_lt(&x->start, &y->end)) {
+            return OVERLAP;
+        } else {
+            return DISJOINT_GREATER;
+        }
+    }
+
+}
+
+
+static bool stack_insert(ParseResultArray* array, ParseResult element) {
+    if (array->size == 0) {
+        array_push(array, element);
+        return true;
+    } else {
+        for (uint32_t i = 0; i < array->size; i++) {
+            ParseResult *result = &array->contents[i];
+            switch (classify_range(&element.range, &result->range)) {
+                case OVERLAP: {
+                    return false;
+                }
+                case PARENT: {
+                    array_insert(array, i, element);
+                    return true;
+                }
+                case DISJOINT_LESS: {
+                    array_insert(array, i, element);
+                    return true;
+                }
+                case DISJOINT_GREATER: {
+                    array_insert(array, i + 1, element);
+                    return true;
+                }
+                case CHILD: {
+                    continue;
+                }
+            }
+        }
+    }
+    return false;
+
+}
 
 // the stack is ordered in the direction that the lexer will encounter elements.
 //
-static bool stack_insert(ParseResultArray* array, uint32_t index, ParseResult element) {
-    assert(index <= array->size);
-    if (index == array->size) {
-        array_push(array, element);
-    } else {
-        uint32_t i = index;
-        ParseResult *old = &(array)->contents[i];
-        // check that what we want to insert is not
-        // within any elements that have start positions
-        // before the end position of our element.
-        while (pos_gt(&element.end, &old->start)) {
-            if (pos_lt(&element.end, &old->end)) {
-                return false;
-            }
-            i++;
-            if (i== array->size) {
-                break;
-            }
-            old =  &(array)->contents[i];
-        }
-        array_insert(array, index, element);
+// static bool stack_insert(ParseResultArray* array, uint32_t index, ParseResult element) {
+//     assert(index <= array->size);
+//     if (index == array->size) {
+//         array_push(array, element);
+//     } else {
+//         uint32_t i = index;
+//         ParseResult *old = &(array)->contents[i];
+//         // check that what we want to insert is not
+//         // within any elements that have start positions
+//         // before the end position of our element.
+//         //
+//         //  |-------------------|      <- want to insert
+//         //         |----------------|  <- but this exists
+//         while (pos_gt(&element.end, &old->start)) {
+//             if (pos_lt(&element.end, &old->end)) {
+//                 return false;
+//             }
+//             i++;
+//             if (i== array->size) {
+//                 break;
+//             }
+//             old =  &(array)->contents[i];
+//         }
+//         array_insert(array, index, element);
 
+//     }
+//     return true;
+// }
+
+static size_t stack_find(ParseResultArray *array, Pos pos, enum ParseToken token, bool end) {
+    ParseResult *element;
+    if (end) {
+        for (size_t i = 0; i < array->size; i++) {
+            element = &array->contents[i];
+            if (element->token == token && pos_eq(&element->range.end, &pos)) {
+                return i;
+            }
+        }
+    } else {
+        for (size_t i = 0; i < array->size; i++) {
+            element = &array->contents[i];
+            if (element->token == token && pos_eq(&element->range.start, &pos)) {
+                return i;
+            }
+        }
     }
-    return true;
+    return not_found;
 }
+
+static void print_pos(const Pos *pos) {
+    fprintf(stderr, "Pos { row: %u, col: %u }", pos->row, pos->col);
+}
+
+static void print_parse_result(const ParseResult *res) {
+    fprintf(stderr, "ParseResult { success: %d, length: %u, range: ", res->success, res->length);
+    fprintf(stderr, "[%i, %i] - ", res->range.start.row, res->range.start.col);
+    fprintf(stderr, "[%i, %i]", res->range.end.row, res->range.end.col);
+    fprintf(stderr, ", token: %d }\n", res->token);
+}
+
 
 static bool is_whitespace(int32_t char_) {
     return char_ == ' ' || char_ == '\t' || char_ == '\n';
@@ -198,7 +345,7 @@ static ParseResult parse_inline(LexWrap *wrapper, ParseResultArray* stack) {
     uint32_t buffer_start_pos = wrapper->pos;
     uint32_t advance_count = 0;
     ParseResult res = new_parse_result();
-    res.start = lex_current_range(wrapper);
+    res.range.start = lex_current_position(wrapper);
     int32_t lookahead = lex_lookahead(wrapper);
     switch (lookahead) {
         case '*':
@@ -209,12 +356,12 @@ static ParseResult parse_inline(LexWrap *wrapper, ParseResultArray* stack) {
 }
 
 static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
-
+    fprintf(stderr, "calling - parse_star()\n");
     uint32_t stack_start_size = stack->size;
     uint32_t buffer_start_pos = wrapper->pos;
     uint32_t advance_count = 0;
     ParseResult res = new_parse_result();
-    res.start = lex_current_range(wrapper);
+    res.range.start = lex_current_position(wrapper);
 
     /// for this parse to be valid one of
     /// if we detect 1 --> expecting emphasis
@@ -230,7 +377,18 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
         advance_count++;
     }
     if (char_count > 3) {
-        lex_backtrack_n(wrapper, char_count);
+        // as a special feature, we insert this into
+        // the stack to signal that it should not match
+        // any symbols
+
+        res.success = true;
+        res.range.end = lex_current_position(wrapper);
+        res.length = char_count;
+        wrapper->lexer->mark_end(wrapper->lexer);
+        fprintf(stderr, "returning a NONE result:");
+        print_parse_result(&res);
+        fprintf(stderr, "\n");
+        stack_insert(stack, res);
         return res;
     }
     enum ParseToken ret_type;
@@ -270,7 +428,8 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
                         // we only have one left to match...
                         // no matter the size of end_char_count
                         lex_backtrack_n(wrapper, end_char_count - 1);
-                        res.end = lex_current_range(wrapper);
+                        uint32_t end_pos = wrapper->pos;
+                        res.range.end = lex_current_position(wrapper);
                         res.success = true;
                         res.token = EMPHASIS_STAR;
                         res.length = wrapper->pos - buffer_start_pos;
@@ -280,24 +439,36 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
                             // if we parse further and find the end result
                             // is EMPHASIS_STAR, invalidate
                             ParseResult attempt = parse_star(wrapper, stack);
-                            if (attempt.token == EMPHASIS_STAR) {
+                            if (attempt.success && attempt.token == EMPHASIS_STAR) {
                                 res.success = false;
+                            } else {
+                                lex_backtrack_n(wrapper, wrapper->pos - end_pos);
                             }
                         }
+                        if (!stack_insert(stack, res)) {
+                            res.success = false;
+                        }
+                        fprintf(stderr, "returning: ");
+                        print_parse_result(&res);
                         return res;
                         break;
                     }
                     case 2: {
                         switch (end_char_count) {
                             case 1: {
-                                // this may invalidate our current
-                                // scope.
+                                // this may invalidate our current  scope
+                                lex_backtrack_n(wrapper, 1);
                                 ParseResult attempt = parse_star(wrapper, stack);
                                 // if it wasn't successful, then this token will
                                 // also not be successful
                                 if (!attempt.success) {
+                                    fprintf(stderr, "returning failure: ");
+                                    print_parse_result(&res);
                                     return res;
                                 }
+                                fprintf(stderr, "successful internal parse... lexer at: ");
+                                Pos _pos = lex_current_position(wrapper);
+                                print_pos(&_pos);
                                 lookahead = lex_lookahead(wrapper);
                                 continue;
                             }
@@ -305,15 +476,17 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
                                 // no matter how many match here. we have
                                 // reached our target.
                                 lex_backtrack_n(wrapper, end_char_count - 2);
-                                res.end = lex_current_range(wrapper);
+                                res.range.end = lex_current_position(wrapper);
                                 res.success = true;
                                 res.token = STRONG_STAR;
                                 res.length = wrapper->pos - buffer_start_pos;
                                 // note that the lexer has pushed past  all the stars
                                 // but we are now in a backtracking state.
-                                if (!stack_insert(stack, stack_start_size, res)) {
+                                if (!stack_insert(stack, res)) {
                                     res.success = false;
                                 }
+                                fprintf(stderr, "returning: ");
+                                print_parse_result(&res);
                                 return res;
                                 break;
                             }
@@ -327,13 +500,13 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
                                 // likely a strong.
                                 // create new result to insert
                                 ParseResult inner = new_parse_result();
-                                inner.end = lex_current_range(wrapper);
-                                inner.start = res.start;
-                                inner.start.col += 2;
+                                inner.range.end = lex_current_position(wrapper);
+                                inner.range.start = res.range.start;
+                                inner.range.start.col += 2;
                                 inner.success = true;
                                 inner.token = EMPHASIS_STAR;
                                 inner.length = wrapper->pos - buffer_start_pos - 2;
-                                if (stack_insert(stack, stack_start_size, inner)) {
+                                if (stack_insert(stack, inner)) {
                                     char_count--;
                                 }
                                 break;
@@ -343,13 +516,13 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
                                 // likely a emph.
                                 // create new result to insert
                                 ParseResult inner = new_parse_result();
-                                inner.end = lex_current_range(wrapper);
-                                inner.start = res.start;
-                                inner.start.col += 1;
+                                inner.range.end = lex_current_position(wrapper);
+                                inner.range.start = res.range.start;
+                                inner.range.start.col += 1;
                                 inner.success = true;
                                 inner.token = STRONG_STAR;
                                 inner.length = wrapper->pos - buffer_start_pos - 1;
-                                if (stack_insert(stack, stack_start_size, inner)) {
+                                if (stack_insert(stack, inner)) {
                                     char_count -= 2;
                                 }
                                 break;
@@ -359,21 +532,21 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
                                 // a '*'
                                 // we have matched our stack!
                                 lex_backtrack_n(wrapper, end_char_count - 3);
-                                res.end = lex_current_range(wrapper);
+                                res.range.end = lex_current_position(wrapper);
                                 res.success = true;
                                 res.token = STRONG_STAR;
-                                res.length = advance_count;
+                                res.length = wrapper->pos - buffer_start_pos;
                                 // inner will be an emphasis
                                 ParseResult inner = new_parse_result();
-                                inner.end = lex_current_range(wrapper);
-                                inner.end.col -= 2;
-                                inner.start = res.start;
-                                inner.start.col += 2;
+                                inner.range.end = lex_current_position(wrapper);
+                                inner.range.end.col -= 2;
+                                inner.range.start = res.range.start;
+                                inner.range.start.col += 2;
                                 inner.success = true;
                                 inner.token = EMPHASIS_STAR;
                                 inner.length = wrapper->pos - buffer_start_pos - 2;
-                                if (stack_insert(stack, stack_start_size, inner)) {
-                                    array_insert(stack, stack_start_size, res);
+                                if (stack_insert(stack, inner)) {
+                                    stack_insert(stack, res);
                                 } else {
                                     res.success = false;
                                 }
@@ -416,7 +589,7 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
         lex_advance(wrapper, false);
         lookahead = lex_lookahead(wrapper);
     }
-    
+
     return res;
 
 }
@@ -432,84 +605,116 @@ static WithinRange new_range2() {
 
 
 typedef struct {
-  WithinRange emphasis; // State to track if we're inside an emphasis block
+  Pos pos;
+  ParseResultArray results; // State to track if we're inside an emphasis block
 } ScannerState;
 
-// Pretty-print a WithinRange struct
-static void print_within_range(const WithinRange *range) {
-    fprintf(stderr, "WithinRange { within: %s, row: %u, col: %u }\n",
-            range->within ? "true" : "false",
-            range->row,
-            range->col);
+static void print_scanner_state(const ScannerState *state) {
+    fprintf(stderr, "ScannerState {\n  pos: ");
+    print_pos(&state->pos);
+    fprintf(stderr, "\n  results (size: %u):\n", state->results.size);
+    for (uint32_t i = 0; i < state->results.size; i++) {
+        fprintf(stderr, "\t");
+        print_parse_result(&state->results.contents[i]);
+    }
+    fprintf(stderr, "}\n");
 }
 
-// Pretty-print a ScannerState struct
-static void print_scanner_state(const ScannerState *state) {
-    fprintf(stderr, "ScannerState {\n  emphasis: ");
-    print_within_range(&state->emphasis);
-    fprintf(stderr, "}\n");
+static void print_lexwrap(const LexWrap *wrap) {
+    fprintf(stderr, "LexWrap {\n  init_pos: [%u, %u]\n  pos: %u\n", wrap->init_pos.row,
+        wrap->init_pos.col, wrap->pos);
+    fprintf(stderr, "  buffer (size: %u)\n", wrap->buffer.size);
+    fprintf(stderr, " new_line_loc (size: %u): [", wrap->new_line_loc.size);
+    for (uint32_t i = 0; i < wrap->new_line_loc.size; i++) {
+        fprintf(stderr, "%u", wrap->new_line_loc.contents[i]);
+        if (i + 1 < wrap->new_line_loc.size) fprintf(stderr, ", ");
+    }
+    fprintf(stderr, "]\n}\n");
 }
 
 
 void *tree_sitter_quarto_external_scanner_create() {
+  // fprintf(stderr, "attempting to create scanner... ");
   ScannerState *state = (ScannerState *)malloc(sizeof(ScannerState));
-  state->emphasis = new_range2(); // Initialize the state
+  state->pos = new_position(0, 0);
+  array_init(&state->results); // Initialize the state
+  // fprintf(stderr, "returning scanner\n");
   return state;
 }
 
 void tree_sitter_quarto_external_scanner_destroy(void *payload) {
+  // fprintf(stderr, "attempting to destroy scanner... ");
+  ScannerState *state = (ScannerState *)payload;
+  array_delete(&state->results); // Free the heap memory used by the array
   free(payload); // Free the allocated state
+  // fprintf(stderr, "freeing memory and exiting\n");
 }
 
 unsigned tree_sitter_quarto_external_scanner_serialize(void *payload, char *buffer) {
+  // fprintf(stderr, "attempting to serialize scanner... ");
   ScannerState *state = (ScannerState *)payload;
   size_t offset = 0;
-
-  buffer[offset++] = state->emphasis.within ? 1 : 0;
-  memcpy(buffer + offset, &state->emphasis.row, sizeof(uint32_t));
+  // get the position
+  memcpy(buffer + offset, &state->pos.row, sizeof(uint32_t));
   offset += sizeof(uint32_t);
-  memcpy(buffer + offset, &state->emphasis.col, sizeof(uint32_t));
+  memcpy(buffer + offset, &state->pos.col, sizeof(uint32_t));
+  offset += sizeof(uint32_t);
+  // Serialize results array size
+  memcpy(buffer + offset, &state->results.size, sizeof(uint32_t));
   offset += sizeof(uint32_t);
 
-  return offset; // Return the number of bytes written
+  // Serialize each ParseResult
+  for (uint32_t i = 0; i < state->results.size; i++) {
+      ParseResult *res = &state->results.contents[i];
+      memcpy(buffer + offset, res, sizeof(ParseResult));
+      offset += sizeof(ParseResult);
+  }
+  // fprintf(stderr, "%zu bytes written... \n", offset);
+  return offset;
 }
 
 void tree_sitter_quarto_external_scanner_deserialize(void *payload, const char *buffer, unsigned length) {
-    if (length >= 1 + 2 * sizeof(uint32_t)) {
-       ScannerState *state = (ScannerState *)payload;
-       size_t offset = 0;
+    // fprintf(stderr, "attempting to deserialize scanner... \n");
+    if (!payload || !buffer) {
+        // fprintf(stderr, "Null pointer in deserialize!\n");
+        return;
+    }
+    if (length < sizeof(uint32_t)) {
+        // fprintf(stderr, "Buffer too small in deserialize!\n");
+        return;
+    }
+    ScannerState *state = (ScannerState *)payload;
+    size_t offset = 0;
 
-       state->emphasis.within = buffer[offset++] == 1;
-       memcpy(&state->emphasis.row, buffer + offset, sizeof(uint32_t));
-       offset += sizeof(uint32_t);
-       memcpy(&state->emphasis.col, buffer + offset, sizeof(uint32_t));
-       // offset += sizeof(uint32_t); // Not needed unless you add more fields
-     }
+    // fprintf(stderr, "writing row bits... ");
+    memcpy(&state->pos.row, buffer + offset, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    // fprintf(stderr, "writing col bits... ");
+    memcpy(&state->pos.col, buffer + offset, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+
+    // fprintf(stderr, "writing array size bits... ");
+    // Deserialize results array size
+    uint32_t arr_size = 0;
+    memcpy(&arr_size, buffer + offset, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+
+    // fprintf(stderr, "reserving array size... ");
+    array_clear(&state->results);
+    array_reserve(&state->results, arr_size);
+    state->results.size = arr_size;
+
+    // fprintf(stderr, "attempting to pull buffer info of %i elements... ", arr_size);
+    // Deserialize each ParseResult
+    for (uint32_t i = 0; i < arr_size; i++) {
+      memcpy(&state->results.contents[i], buffer + offset, sizeof(ParseResult));
+      offset += sizeof(ParseResult);
+    }
+    // fprintf(stderr, "exiting from deserializing function... \n");
 }
 
 
 
-// static bool is_static_at_symbol(TSLexer *lexer, int32_t current_char) {
-//     return lexer->lookahead == '@' && !u_isalpha((UChar32)current_char);
-// }
-
-// static bool valid_prior_emph_end(TSLexer *lexer, int32_t current_char, int32_t emph_char, bool *in_citation) {
-//     bool whitespace_next = is_whitespace_next(lexer);
-//     bool detect_at_symbol = emph_char == '_' && is_static_at_symbol(lexer, current_char);
-//     if (whitespace_next) {
-//         *in_citation = false;
-//     } else if (detect_at_symbol) {
-//         *in_citation = true;
-//     }
-//     if (whitespace_next ||  *in_citation ||
-//         lexer->lookahead == '_' ||
-//         lexer->lookahead == '*') {
-
-//         return false;
-//     }
-
-//     return true;
-// }
 
 static int32_t other_emphasis(int32_t char_) {
     if (char_=='*') {
@@ -518,317 +723,29 @@ static int32_t other_emphasis(int32_t char_) {
     return '*';
 }
 
-typedef struct Queue {
-    uint8_t emph_star;
-    uint8_t emph_under;
-    uint8_t strong_star;
-    uint8_t strong_under;
-    uint8_t strong_emph_star;
-    uint8_t strong_emph_under;
-    uint8_t superscript;
-    uint8_t subscript;
-    uint8_t strikethrough;
-    uint8_t Reference;
-    uint8_t span;
-    void (*set_emph)(struct Queue* self, int32_t char_, uint8_t index);
-    uint8_t (*get_emph)(struct Queue* self, int32_t char_);
-    void (*set_strong)(struct Queue* self, int32_t char_, uint8_t index);
-    uint8_t (*get_strong)(struct Queue* self, int32_t char_);
-    void (*set_strong_emph)(struct Queue* self, int32_t char_, uint8_t index);
-    uint8_t (*get_strong_emph)(struct Queue* self, int32_t char_);
-} Queue;
-
-void set_emph_impl(Queue* self, int32_t char_, uint8_t index) {
-    if (char_ == '_') {
-        self->emph_under = index;
-    } else {
-        self->emph_star = index;
-    }
-}
-
-uint8_t get_emph_impl(Queue* self, int32_t char_) {
-    if (char_ == '_') {
-        return self->emph_under;
-    } else {
-        return self->emph_star;
-    }
-}
-
-void set_strong_impl(Queue* self, int32_t char_, uint8_t index) {
-    if (char_ == '_') {
-        self->strong_under = index;
-    } else {
-        self->strong_star = index;
-    }
-}
-
-uint8_t get_strong_impl(Queue* self, int32_t char_) {
-    if (char_ == '_') {
-        return self->strong_under;
-    } else {
-        return self->strong_star;
-    }
-}
-
-void set_strong_emph_impl(Queue* self, int32_t char_, uint8_t index) {
-    if (char_ == '_') {
-        self->strong_emph_under = index;
-    } else {
-        self->strong_emph_star = index;
-    }
-}
-
-uint8_t get_strong_emph_impl(Queue* self, int32_t char_) {
-    if (char_ == '_') {
-        return self->strong_emph_under;
-    } else {
-        return self->strong_emph_star;
-    }
-}
-
-static Queue new_queue() {
-    Queue obj;
-    obj.emph_star = 0;
-    obj.emph_under = 0;
-    obj.strong_star = 0;
-    obj.strong_under = 0;
-    obj.strong_emph_star = 0;
-    obj.strong_emph_under = 0;
-    obj.superscript = 0;
-    obj.subscript = 0;
-    obj.strikethrough = 0;
-    obj.Reference = 0;
-    obj.span = 0;
-    obj.set_emph = set_emph_impl;
-    obj.get_emph = get_emph_impl;
-    obj.set_strong = set_strong_impl;
-    obj.get_strong = get_strong_impl;
-    obj.set_strong_emph = set_strong_emph_impl;
-    obj.get_strong_emph = get_strong_emph_impl;
-
-    return obj;
-}
-
-// advances the lexer until we find
-// another star that would be valid
-// closing star.
-// a result of true indicates the lexer
-// has just consumed that valid closing star
-//
-// a result of false indicates the lexer
-// failed to find a valid closing star.
-static bool find_end_emph(TSLexer *lexer, int32_t char_, WithinRange *range) {
-    fprintf(stderr, "finding end %c\n", char_);
-    uint8_t char_count = 1;
-    while (lexer->lookahead == char_) {
-        lexer->advance(lexer, false);
-        char_count++;
-    }
-    // this function is for finding a SINGLE emphasis token
-    // however if we detect excatly 2, there is no way to
-    // split them down the line
-    if (char_count==2) {
-        return false;
-    }
-    if (char_count>3) {
-        // this will invalidate the next three
-        // attempts to find any kind of '*' or '_' pattern.
-        // should do something to the scanner state
-        return false;
-    }
-    uint8_t new_line_count = 0;
-    uint32_t row = 0;
-    uint32_t col = 0;
-    int32_t other_char = other_emphasis(char_);
-    int32_t other_char_count = 0;
-    Queue queue = new_queue();
-    uint8_t qcount = 1;
-    queue.set_emph(&queue, char_, qcount);
-    if (char_count > 1) {
-        qcount++;
-        queue.set_strong(&queue, char_, qcount);
-    }
-    while(lexer->lookahead == other_char) {
-        other_char_count++;
-        col++;
-        lexer->advance(lexer, false);
-    }
-    // this is immediately after char_
-    // and if whitespace follows the other
-    // emphasis symbol, this doesnt necessarily
-    // invalidate char_ empahsis
-    if (is_whitespace_next(lexer) || other_char_count > 3) {
-        other_char_count = 0;
-    } else {
-        qcount++;
-        switch (other_char_count) {
-            case 1:
-              queue.set_emph(&queue, other_char, qcount);
-              break;
-            case 2:
-                queue.set_strong(&queue, other_char, qcount);
-                break;
-            case 3:
-                queue.set_strong_emph(&queue, other_char, qcount);
-                break;
-        }
-    }
-
-    // assume the prior character is whitespace.
-    int32_t current_char = ' ';
-    bool in_citation = false;
-    // StrongRange strong = new_strong_range();
-    while (lexer->lookahead != '\0' &&
-           // lexer->lookahead != char_ &&
-           char_count > 0 ) {
-            // fprintf(stderr, "target_char: %c - current_char: %c - next char: %c - valid_prior: %i - in_citation: %i",
-            //     char_, current_char, lexer->lookahead, valid_prior_char, in_citation);
-        switch (lexer->lookahead) {
-            case '@':
-               if (is_whitespace(current_char)) {
-                   //likely a citation
-                   qcount++;
-                   queue.Reference = qcount;
-               }
-               break;
-            case '*':
-            case '_':
-                if (lexer->lookahead == char_) {
-                    if (queue.Reference) {
-
-                    }
-                    // we only reach this branch if char_count == 3
-                    // or == 1
-                    uint8_t char_consumed = 0;
-                    while(lexer->lookahead == char_) {
-                        char_consumed++;
-                        col++;
-                        lexer->advance(lexer, false);
-                    }
-                    // short cut - for this scan
-                    if (char_count == 3) {
-                       if (char_consumed == 2) {
-                           char_count = 1;
-                           continue;
-                       }
-                       // decrementing by 2 would be the only valid
-                       // way for emphasis.
-                       return false;
-                    }
-                    // char_count == 1 here
-                    switch (char_consumed) {
-                        case 1:
-                          char_count = 0;
-                          break;
-                        case 2:
-                          char_count += 2;
-                        default:
-                          char_count = 0;
-                          char_consumed--;
-                          col -= char_consumed;
-                          continue;
-                          break;
-                    }
-                } else {
-                    if (other_char_count==0) {
-                        while(lexer->lookahead == other_char) {
-                            other_char_count++;
-                            col++;
-                            lexer->advance(lexer, false);
-                        }
-                        // next symbol MUST be a character
-                        if (is_whitespace_next(lexer) || other_char_count > 3) {
-                            other_char_count = 0;
-                        }
-                    } else {
-                        int32_t prior_count = other_char_count;
-                        while(lexer->lookahead == other_char && other_char_count > 0) {
-                            other_char_count--;
-                            col++;
-                            lexer->advance(lexer, false);
-                        }
-                        if (prior_count == 2 && other_char_count != 0) {
-                            return false;
-                        }
-                        if (other_char_count == 0 && lexer->lookahead == other_char) {
-                            // we have a trailing symbol with no whitespace
-                            return false;
-                        }
-                        if (other_char=='_' && !is_whitespace_next(lexer)) {
-                            // underscores could be used interword
-                            return false;
-                        }
-                        // // next symbol MUST be a character
-                        // if (!u_isalnum((UChar32)lexer->lookahead)) {
-                        //     // we have detected the other emphasis
-                        //     // and it has an invalid start...
-                        //     return false;
-                        // }
-                    }
-                }
-
-                break;
-            case '\n':
-                new_line_count++;
-                row++;
-                col = 0;
-                if (new_line_count > 1) {
-                    return false;
-                }
-                break;
-            case '\\':
-                // assuming that this is an emphasis block.
-                // advance and the next lexer->advance will
-                // treat it as a literal. Note that '\\' is
-                // a valid prior char and thus anyting we
-                // move past will be considered valid.
-                col++;
-                lexer->advance(lexer, false);
-                break;
-            default:
-                if (is_whitespace_next(lexer)) {
-                    if (queue.Reference) {
-                        if (queue.Reference != qcount) {
-                            return false;
-                        }
-                        queue.Reference = 0;
-                        qcount--;
-                    }
-                }
-
-        }
-        current_char = lexer->lookahead;
-        col++;
-        lexer->advance(lexer, false);
-    }
-    // we know that this next symbol is valid for an emphasis.
-    // if any other scans is still open, this may be invalid
-    if (other_char_count) {
-        return false;
-    }
-
-    // We do not mark the ending as this is a helper function for the
-    // Start symbol which was already marked.
-    // simply return true and update the range
-    if (lexer->lookahead == char_) {
-        // we have reached a valid emphasis
-        if (row == 0) {
-            col = lexer->get_column(lexer);
-        } else {
-            col--;
-        }
-        range->row += row;
-        range->col = col;
-        // lexer->advance(lexer, false);
-        return true;
-    }
-    return false;
+static void print_valid_symbols(const bool *valid_symbols) {
+    fprintf(stderr, "valid_symbols: [");
+    fprintf(stderr, "LINE_END=%d, ", valid_symbols[LINE_END]);
+    fprintf(stderr, "EMPHASIS_STAR_START=%d, ", valid_symbols[EMPHASIS_STAR_START]);
+    fprintf(stderr, "EMPHASIS_STAR_END=%d, ", valid_symbols[EMPHASIS_STAR_END]);
+    fprintf(stderr, "EMPHASIS_UNDER_START=%d, ", valid_symbols[EMPHASIS_UNDER_START]);
+    fprintf(stderr, "EMPHASIS_UNDER_END=%d, ", valid_symbols[EMPHASIS_UNDER_END]);
+    fprintf(stderr, "STRONG_STAR_START=%d, ", valid_symbols[STRONG_STAR_START]);
+    fprintf(stderr, "STRONG_STAR_END=%d, ", valid_symbols[STRONG_STAR_END]);
+    fprintf(stderr, "ERROR=%d", valid_symbols[ERROR]);
+    fprintf(stderr, "]\n");
 }
 
 bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, const bool *valid_symbols) {
+
+  if (valid_symbols[ERROR]) {
+      return false;
+  }
   ScannerState *state = (ScannerState *)payload;
   print_scanner_state(state);
-  fprintf(stderr, "scanner invoked before: %c - is alpha: %i\n", lexer->lookahead, isalnum((int)lexer->lookahead));
+  fprintf(stderr, "scanner invoked before: %c - is alpha: %i\n",
+      lexer->lookahead, isalnum((int)lexer->lookahead));
+  print_valid_symbols(valid_symbols);
   if (valid_symbols[ERROR]) {
       fprintf(stderr, "ERROR is a valid symbol\n");
       return false;
@@ -843,112 +760,184 @@ bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, con
   // fprintf(stderr, "scanner invoked... next char %c\n", lexer->lookahead);
   // Detect a newline
   if (lexer->lookahead == '\n' && valid_symbols[LINE_END]) {
-    if (state->emphasis.within) {
-        state->emphasis.row--;
-    }
+    state->pos.row++;
+    state->pos.col = 0;
     lexer->advance(lexer, false); // Consume the newline
     lexer->result_symbol = LINE_END; // Emit the LINE_END token
     return true;
   }
 
+  // detect  star
+  if (lexer->lookahead == '*' && (
+      valid_symbols[EMPHASIS_STAR_START] ||
+      valid_symbols[STRONG_STAR_START] ||
+      valid_symbols[EMPHASIS_STAR_END] ||
+      valid_symbols[STRONG_STAR_END]
+  )) {
+      fprintf(stderr, "looking for strong or emph star\n");
+      // get current start position
+      state->pos.col = lexer->get_column(lexer);
+      LexWrap wrapper = new_lexer(lexer, state->pos);
+      lex_advance(&wrapper, false);
+      // possible end if just an emphasis
+      lexer->mark_end(lexer);
+      // before we move the lexer forward check
+      // if emphasis is valid... The grammar could
+      // enable STRONG_STAR_END and EMPH_STAR_END
+      // at the same time...
+      Pos possible_pos = lex_current_position(&wrapper);
+      fprintf(stderr, "lex is at: ");
+      print_pos(&possible_pos);
+      fprintf(stderr, "\n");
+      if (valid_symbols[EMPHASIS_STAR_END]) {
+          size_t index = stack_find(&state->results, possible_pos, EMPHASIS_STAR, true);
+          if (index < not_found) {
+              lexer->result_symbol = EMPHASIS_STAR_END;
+              array_erase(&state->results, index);
+              return true;
+          }
+      }
 
+      if (valid_symbols[EMPHASIS_STAR_START]) {
+          // the start position should be one step prior
+          possible_pos.col--;
+          size_t index = stack_find(&state->results, possible_pos, EMPHASIS_STAR, false);
+          if (index < not_found) {
+              lexer->result_symbol = EMPHASIS_STAR_START;
+              return true;
+          }
+          possible_pos.col++;
+      }
 
-  // Detect emphasis start
-  if (!state->emphasis.within &&
-      ((lexer->lookahead == '*' && valid_symbols[EMPHASIS_STAR_START]) ||
-          (lexer->lookahead == '_' && valid_symbols[EMPHASIS_UNDER_START]))) {
+      // without actually advancing the lexer, check the stack
+      if (valid_symbols[STRONG_STAR_START] || valid_symbols[STRONG_STAR_END]) {
+          possible_pos.col++;
+          if (valid_symbols[STRONG_STAR_END]) {
+              size_t index = stack_find(&state->results, possible_pos, STRONG_STAR, true);
+              if (index < not_found) {
+                  lex_advance(&wrapper, false);
+                  lexer->mark_end(lexer);
+                  lexer->result_symbol = STRONG_STAR_END;
+                  array_erase(&state->results, index);
+                  return true;
+              }
+          }
+          if (valid_symbols[STRONG_STAR_START]) {
+              //again, the start will be on the other side
+              possible_pos.col -= 2;
+              size_t index = stack_find(&state->results, possible_pos, STRONG_STAR, false);
+              if (index < not_found) {
+                  lex_advance(&wrapper, false);
+                  lexer->mark_end(lexer);
+                  lexer->result_symbol = STRONG_STAR_START;
+                  return true;
+              }
+              possible_pos.col += 2;
+          }
+      }
 
-    if (valid_symbols[EMPHASIS_UNDER_START] && !skipped_whitespace) {
-        return false;
-    }
-    int32_t emph_char = lexer->lookahead;
-    fprintf(stderr, "found a %c to begin at emphasis\n", emph_char);
-    lexer->advance(lexer, false); // Consume the '*'
-    lexer->mark_end(lexer); // this is potentially a emphasis start
-    if (is_whitespace_next(lexer)) {
-        // two stars back to back are not an emphasis
-        // having space between a start and a word is not an valid emphasis
-        return false;
-    }
-    //advance the lexer
-    if (find_end_emph(lexer, emph_char, &state->emphasis)) {
-        // note if returning true, state->emphasis has definitly
-        // changed its range values.
+      // failed to match any pre-parsed info on the stack.
+      // Its not the time to advance the lexer if STRONG match is possible.
+      if (valid_symbols[EMPHASIS_STAR_START] || valid_symbols[STRONG_STAR_START]) {
 
-        // make sure the next symbol isn't another of the
-        // same type... this could imply a double emphasis
-        switch (emph_char) {
-            case '*':
-                while (lexer->lookahead == emph_char) {
-                    lexer->advance(lexer, true);
-                    if (!find_end_emph(lexer, emph_char, &state->emphasis)) {
-                        state->emphasis.row = 0;
-                        return false;
-                    }
-                }
-                break;
-            case '_':
-                while (!is_whitespace_next(lexer)) {
-                    lexer->advance(lexer, true);
-                    if (!find_end_emph(lexer, emph_char, &state->emphasis)) {
-                        state->emphasis.row = 0;
-                        return false;
-                    }
-                }
-                break;
-        }
+          if (lexer->lookahead == '*' && valid_symbols[STRONG_STAR_START]) {
+              lex_advance(&wrapper, false);
+              lexer->mark_end(lexer);
+          }
+          // reset wrapper to begining of this scan.
+          lex_backtrack_n(&wrapper, wrapper.buffer.size);
+          // try and handle this parse...
+          ParseResult res = parse_star(&wrapper, &state->results);
+          if (res.success) {
+              if (res.token == NONE) {
+                  lexer->result_symbol = ERROR;
+                  return true;
+              }
+              if (valid_symbols[EMPHASIS_STAR_START] && res.token == EMPHASIS_STAR) {
+                  lexer->result_symbol = EMPHASIS_STAR_START;
+                  return true;
+              } else if (valid_symbols[STRONG_STAR_START] && res.token == STRONG_STAR){
+                  lexer->result_symbol = STRONG_STAR_START;
+                  return true;
+              }
+          }
+      }
 
-        if (emph_char == '*') {
-            lexer->result_symbol = EMPHASIS_STAR_START; // Emit the EMPHASIS_STAR_START token
-        } else {
-            lexer->result_symbol = EMPHASIS_UNDER_START;
-        }
-        state->emphasis.within = true; // Update the state
-        return true;
-    }
   }
 
-  // Detect emphasis end
-  if (state->emphasis.within &&
-      state->emphasis.row == 0 &&
-      ((lexer->lookahead == '*' && valid_symbols[EMPHASIS_STAR_END]) ||
-          (lexer->lookahead == '_' && valid_symbols[EMPHASIS_UNDER_END]))) {
-    // fprintf(stderr, "looking for end star, detected whitespace before %i\n", skipped_whitespace);
-    fprintf(stderr, "looking for ending - calculating column from lexer\n");
-    int32_t emph_char = lexer->lookahead;
-    if (lexer->get_column(lexer) == state->emphasis.col) {
-        lexer->advance(lexer, false);
-        lexer->mark_end(lexer);
-        if (emph_char == '*') {
-            lexer->result_symbol = EMPHASIS_STAR_END; // Emit the EMPHASIS_STAR_END token
-        } else {
-            lexer->result_symbol = EMPHASIS_UNDER_END;
-        }
-        state->emphasis.col = 0;
-        state->emphasis.within = false; // Update the state
-        return true;
-    }
 
-    // if (skipped_whitespace) {
-    //     return false;
-    // }
-    // lexer->advance(lexer, false);
-    // if (lexer->lookahead == emph_char || (
-    //     valid_symbols[EMPHASIS_UNDER_END] && !is_whitespace_next(lexer)
-    // )) {
-    //     return false;
-    // } else {
-    //     lexer->mark_end(lexer);
-    //     if (emph_char == '*') {
-    //         lexer->result_symbol = EMPHASIS_STAR_END; // Emit the EMPHASIS_STAR_END token
-    //     } else {
-    //         lexer->result_symbol = EMPHASIS_UNDER_END;
-    //     }
-    //     state->emphasis.within = false; // Update the state
-    //     return true;
-    // }
+  // // detect emphasis end
+  // if (lexer->lookahead == '*' && valid_symbols[EMPHASIS_STAR_END]) {
+  //     fprintf(stderr, "looking for emphasis ending symbol\n");
+  //     state->pos.col = lexer->get_column(lexer);
+  //     LexWrap wrapper = new_lexer(lexer, state->pos);
+  //     lex_advance(&wrapper, false);
+  //     lexer->mark_end(lexer);
+  //     Pos possible_end = lex_current_position(&wrapper);
+  //     fprintf(stderr, "lex is at: ");
+  //     print_pos(&possible_end);
+  //     // ideally the first element of the stack is correct...
+  //     ParseResult *first = array_get(&state->results, 0);
+  //     fprintf(stderr, "\n first element in stack is...\n");
+  //     print_parse_result(first);
+  //     if (pos_eq(&first->end, &possible_end) &&
+  //         first->token == EMPHASIS_STAR) {
+  //         lexer->result_symbol = EMPHASIS_STAR_END;
+  //         array_erase(&state->results, 0);
+  //         return true;
+  //     }
 
-  }
+  // }
+
+  // // detect emphasis end
+  // if (lexer->lookahead == '*' && valid_symbols[STRONG_STAR_END]) {
+  //     fprintf(stderr, "looking for strong ending symbol\n");
+  //     state->pos.col = lexer->get_column(lexer);
+  //     LexWrap wrapper = new_lexer(lexer, state->pos);
+  //     lex_advance(&wrapper, false);
+  //     if (lexer->lookahead != '*') {
+  //         return false;
+  //     }
+  //     lex_advance(&wrapper, false);
+  //     lexer->mark_end(lexer);
+  //     Pos possible_end = lex_current_position(&wrapper);
+  //     fprintf(stderr, "lex is at: ");
+  //     print_pos(&possible_end);
+  //     // ideally the first element of the stack is correct...
+  //     ParseResult *first = array_get(&state->results, 0);
+  //     fprintf(stderr, "\n first element in stack is...\n");
+  //     print_parse_result(first);
+  //     if (pos_eq(&first->end, &possible_end) &&
+  //         first->token == STRONG_STAR) {
+  //         lexer->result_symbol = STRONG_STAR_END;
+  //         array_erase(&state->results, 0);
+  //         return true;
+  //     }
+
+  // }
+
+  // // Detect emphasis end
+  // if (state->emphasis.within &&
+  //     state->emphasis.row == 0 &&
+  //     ((lexer->lookahead == '*' && valid_symbols[EMPHASIS_STAR_END]) ||
+  //         (lexer->lookahead == '_' && valid_symbols[EMPHASIS_UNDER_END]))) {
+  //   // fprintf(stderr, "looking for end star, detected whitespace before %i\n", skipped_whitespace);
+  //   fprintf(stderr, "looking for ending - calculating column from lexer\n");
+  //   int32_t emph_char = lexer->lookahead;
+  //   if (lexer->get_column(lexer) == state->emphasis.col) {
+  //       lexer->advance(lexer, false);
+  //       lexer->mark_end(lexer);
+  //       if (emph_char == '*') {
+  //           lexer->result_symbol = EMPHASIS_STAR_END; // Emit the EMPHASIS_STAR_END token
+  //       } else {
+  //           lexer->result_symbol = EMPHASIS_UNDER_END;
+  //       }
+  //       state->emphasis.col = 0;
+  //       state->emphasis.within = false; // Update the state
+  //       return true;
+  //   }
+
+  // }
 
   return false; // No token recognized
 }
