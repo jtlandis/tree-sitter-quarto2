@@ -339,11 +339,11 @@ static bool is_inline_synatx(int32_t char_) {
 
 static ParseResult parse_inline(LexWrap *wrapper, ParseResultArray* stack);
 static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack);
+static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack);
 
 static ParseResult parse_inline(LexWrap *wrapper, ParseResultArray* stack) {
     uint32_t stack_start_size = stack->size;
     uint32_t buffer_start_pos = wrapper->pos;
-    uint32_t advance_count = 0;
     ParseResult res = new_parse_result();
     res.range.start = lex_current_position(wrapper);
     int32_t lookahead = lex_lookahead(wrapper);
@@ -359,7 +359,6 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
     fprintf(stderr, "calling - parse_star()\n");
     uint32_t stack_start_size = stack->size;
     uint32_t buffer_start_pos = wrapper->pos;
-    uint32_t advance_count = 0;
     ParseResult res = new_parse_result();
     res.range.start = lex_current_position(wrapper);
 
@@ -374,7 +373,6 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
     while (lex_lookahead(wrapper) == '*') {
         lex_advance(wrapper, false);
         char_count++;
-        advance_count++;
     }
     if (char_count > 3) {
         // as a special feature, we insert this into
@@ -554,7 +552,6 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
             case '\\': {
                 // treat next character as literal - do not
                 // parse it
-                advance_count++;
                 lex_advance(wrapper, false);
                 break;
             }
@@ -570,7 +567,6 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
             }
                 break;
         }
-        advance_count++;
         lex_advance(wrapper, false);
         lookahead = lex_lookahead(wrapper);
     }
@@ -583,7 +579,6 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
     fprintf(stderr, "calling - parse_under()\n");
     uint32_t stack_start_size = stack->size;
     uint32_t buffer_start_pos = wrapper->pos;
-    uint32_t advance_count = 0;
     ParseResult res = new_parse_result();
     res.range.start = lex_current_position(wrapper);
 
@@ -595,10 +590,9 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
     ///                    early.
     /// > 3 --> return false
     uint8_t char_count = 0;
-    while (lex_lookahead(wrapper) == '*') {
+    while (lex_lookahead(wrapper) == '_') {
         lex_advance(wrapper, false);
         char_count++;
-        advance_count++;
     }
     if (char_count > 3) {
         // as a special feature, we insert this into
@@ -778,7 +772,6 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
             case '\\': {
                 // treat next character as literal - do not
                 // parse it
-                advance_count++;
                 lex_advance(wrapper, false);
                 break;
             }
@@ -794,7 +787,6 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
             }
                 break;
         }
-        advance_count++;
         lex_advance(wrapper, false);
         lookahead = lex_lookahead(wrapper);
     }
