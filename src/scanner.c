@@ -25,6 +25,7 @@ enum ParseToken {
     EMPHASIS_STAR,
     EMPHASIS_UNDER,
     STRONG_STAR,
+    STRONG_UNDER,
 };
 
 
@@ -225,28 +226,28 @@ static enum RangeType classify_range(Range *x, Range *y) {
 }
 
 
-static bool stack_insert(ParseResultArray* array, ParseResult element) {
+static size_t stack_insert(ParseResultArray* array, ParseResult element) {
     if (array->size == 0) {
         array_push(array, element);
-        return true;
+        return 0;
     } else {
-        for (uint32_t i = 0; i < array->size; i++) {
+        for (size_t i = 0; i < array->size; i++) {
             ParseResult *result = &array->contents[i];
             switch (classify_range(&element.range, &result->range)) {
                 case OVERLAP: {
-                    return false;
+                    return not_found;
                 }
                 case PARENT: {
                     array_insert(array, i, element);
-                    return true;
+                    return i;
                 }
                 case DISJOINT_LESS: {
                     array_insert(array, i, element);
-                    return true;
+                    return i;
                 }
                 case DISJOINT_GREATER: {
                     array_insert(array, i + 1, element);
-                    return true;
+                    return i + 1;
                 }
                 case CHILD: {
                     continue;
@@ -254,40 +255,11 @@ static bool stack_insert(ParseResultArray* array, ParseResult element) {
             }
         }
     }
-    return false;
+    return not_found;
 
 }
 
-// the stack is ordered in the direction that the lexer will encounter elements.
-//
-// static bool stack_insert(ParseResultArray* array, uint32_t index, ParseResult element) {
-//     assert(index <= array->size);
-//     if (index == array->size) {
-//         array_push(array, element);
-//     } else {
-//         uint32_t i = index;
-//         ParseResult *old = &(array)->contents[i];
-//         // check that what we want to insert is not
-//         // within any elements that have start positions
-//         // before the end position of our element.
-//         //
-//         //  |-------------------|      <- want to insert
-//         //         |----------------|  <- but this exists
-//         while (pos_gt(&element.end, &old->start)) {
-//             if (pos_lt(&element.end, &old->end)) {
-//                 return false;
-//             }
-//             i++;
-//             if (i== array->size) {
-//                 break;
-//             }
-//             old =  &(array)->contents[i];
-//         }
-//         array_insert(array, index, element);
 
-//     }
-//     return true;
-// }
 
 static size_t stack_find(ParseResultArray *array, Pos pos, enum ParseToken token, bool end) {
     ParseResult *element;
@@ -423,12 +395,13 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
                             // is EMPHASIS_STAR, invalidate
                             ParseResult attempt = parse_star(wrapper, stack);
                             if (attempt.success && attempt.token == EMPHASIS_STAR) {
+                                attempt.token = NONE;
                                 res.success = false;
                             } else {
                                 lex_backtrack_n(wrapper, wrapper->pos - end_pos);
                             }
                         }
-                        if (!stack_insert(stack, res)) {
+                        if (stack_insert(stack, res) == not_found) {
                             res.success = false;
                         }
                         fprintf(stderr, "returning: ");
@@ -465,7 +438,7 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
                                 res.length = wrapper->pos - buffer_start_pos;
                                 // note that the lexer has pushed past  all the stars
                                 // but we are now in a backtracking state.
-                                if (!stack_insert(stack, res)) {
+                                if (stack_insert(stack, res) == not_found) {
                                     res.success = false;
                                 }
                                 fprintf(stderr, "returning: ");
@@ -489,7 +462,7 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
                                 inner.success = true;
                                 inner.token = EMPHASIS_STAR;
                                 inner.length = wrapper->pos - buffer_start_pos - 2;
-                                if (stack_insert(stack, inner)) {
+                                if (stack_insert(stack, inner) < not_found) {
                                     char_count--;
                                 }
                                 break;
@@ -505,7 +478,7 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
                                 inner.success = true;
                                 inner.token = STRONG_STAR;
                                 inner.length = wrapper->pos - buffer_start_pos - 1;
-                                if (stack_insert(stack, inner)) {
+                                if (stack_insert(stack, inner) < not_found) {
                                     char_count -= 2;
                                 }
                                 break;
@@ -528,8 +501,9 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
                                 inner.success = true;
                                 inner.token = EMPHASIS_STAR;
                                 inner.length = wrapper->pos - buffer_start_pos - 2;
-                                if (stack_insert(stack, inner)) {
-                                    stack_insert(stack, res);
+                                size_t index = stack_insert(stack, inner);
+                                if (index < not_found) {
+                                    array_insert(stack, index, res);
                                 } else {
                                     res.success = false;
                                 }
@@ -619,10 +593,10 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
     uint8_t new_line_count = 0;
     while(lookahead != '\0' && char_count > 0) {
         switch (lookahead) {
-            case '*': {
+            case '_': {
                 // see how many we can consume
                 end_char_count = 0;
-                while (lex_lookahead(wrapper) == '*') {
+                while (lex_lookahead(wrapper) == '_') {
                     lex_advance(wrapper, false);
                     end_char_count++;
                 }
@@ -634,9 +608,9 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                         uint32_t end_pos = wrapper->pos;
                         res.range.end = lex_current_position(wrapper);
                         res.success = true;
-                        res.token = EMPHASIS_STAR;
+                        res.token = EMPHASIS_UNDER;
                         res.length = wrapper->pos - buffer_start_pos;
-                        // note that the lexer has pushed past  all the stars
+                        // note that the lexer has pushed past  all the underscores
                         // but we are now in a backtracking state.
                         if (end_char_count > 1) {
                             // if we parse further and find the end result
@@ -648,7 +622,7 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                 lex_backtrack_n(wrapper, wrapper->pos - end_pos);
                             }
                         }
-                        if (!stack_insert(stack, res)) {
+                        if (stack_insert(stack, res)==not_found) {
                             res.success = false;
                         }
                         fprintf(stderr, "returning: ");
@@ -685,7 +659,7 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                 res.length = wrapper->pos - buffer_start_pos;
                                 // note that the lexer has pushed past  all the stars
                                 // but we are now in a backtracking state.
-                                if (!stack_insert(stack, res)) {
+                                if (stack_insert(stack, res)==not_found) {
                                     res.success = false;
                                 }
                                 fprintf(stderr, "returning: ");
@@ -709,7 +683,7 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                 inner.success = true;
                                 inner.token = EMPHASIS_STAR;
                                 inner.length = wrapper->pos - buffer_start_pos - 2;
-                                if (stack_insert(stack, inner)) {
+                                if (stack_insert(stack, inner) < not_found) {
                                     char_count--;
                                 }
                                 break;
@@ -725,7 +699,7 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                 inner.success = true;
                                 inner.token = STRONG_STAR;
                                 inner.length = wrapper->pos - buffer_start_pos - 1;
-                                if (stack_insert(stack, inner)) {
+                                if (stack_insert(stack, inner) < not_found) {
                                     char_count -= 2;
                                 }
                                 break;
@@ -748,8 +722,9 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                 inner.success = true;
                                 inner.token = EMPHASIS_STAR;
                                 inner.length = wrapper->pos - buffer_start_pos - 2;
-                                if (stack_insert(stack, inner)) {
-                                    stack_insert(stack, res);
+                                size_t index = stack_insert(stack, inner);
+                                if (index < not_found) {
+                                    array_insert(stack, index, res);
                                 } else {
                                     res.success = false;
                                 }
