@@ -391,21 +391,6 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
         stack_insert(stack, res);
         return res;
     }
-    enum ParseToken ret_type;
-    switch (char_count) {
-        case 1: {
-            ret_type = EMPHASIS_STAR;
-            break;
-        }
-        case 2: {
-            ret_type = STRONG_STAR;
-            break;
-        }
-
-        case 3:
-            ret_type = NONE;
-            break;
-    }
     int32_t lookahead = lex_lookahead(wrapper);
     if (is_whitespace(lookahead)) {
         // cannot parse star as any type of valid
@@ -629,21 +614,6 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
         fprintf(stderr, "\n");
         stack_insert(stack, res);
         return res;
-    }
-    enum ParseToken ret_type;
-    switch (char_count) {
-        case 1: {
-            ret_type = EMPHASIS_STAR;
-            break;
-        }
-        case 2: {
-            ret_type = STRONG_STAR;
-            break;
-        }
-
-        case 3:
-            ret_type = NONE;
-            break;
     }
     int32_t lookahead = lex_lookahead(wrapper);
     if (is_whitespace(lookahead)) {
