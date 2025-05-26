@@ -499,31 +499,7 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
                             // is EMPHASIS_STAR, invalidate
                             ParseResult attempt = parse_star(wrapper, stack);
                             if (attempt.success && attempt.token == EMPHASIS_STAR) {
-                                size_t index = stack_find(stack, &attempt.range.start, EMPHASIS_STAR, false);
-                                ParseResult *stack_res = &stack->contents[index];
-                                if (pos_eq(&attempt.range.end, &stack_res->range.end)) {
-                                    // remove it from the stack
-                                    array_erase(stack, index);
-                                    // isert special - "no parse" tokens
-                                    ParseResult emph_start = new_parse_result();
-                                    emph_start.token = DO_NOT_PARSE;
-                                    emph_start.range.start = attempt.range.start;
-                                    emph_start.range.end = emph_start.range.start;
-                                    emph_start.length = 1;
-                                    emph_start.range.end.col++;
-                                    fprintf(stderr, "attempting to add DO_NOT_PARSE: ");
-                                    print_parse_result(&emph_start);
-                                    stack_insert(stack, emph_start);
-                                    ParseResult emph_end = new_parse_result();
-                                    emph_end.token = DO_NOT_PARSE;
-                                    emph_end.range.end = attempt.range.end;
-                                    emph_end.range.start = emph_end.range.end;
-                                    emph_end.range.start.col--;
-                                    emph_end.length = 1;
-                                    fprintf(stderr, "attempting to add DO_NOT_PARSE: ");
-                                    print_parse_result(&emph_end);
-                                    stack_insert(stack, emph_end);
-                                }
+                                dont_parse_result(&attempt, stack);
                                 ParseResult emph_end = new_parse_result();
                                 emph_end.token = DO_NOT_PARSE;
                                 emph_end.range.start = res.range.end;
@@ -727,6 +703,7 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
         // emphasis or strong.
         return res;
     }
+    uint32_t last_char = ' ';
     uint8_t end_char_count = 0;
     uint8_t new_line_count = 0;
     while(lookahead != '\0' && char_count > 0) {
@@ -738,6 +715,7 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                     lex_advance(wrapper, false);
                     end_char_count++;
                 }
+                int32_t next_char = lex_lookahead(wrapper);
                 switch (char_count) {
                     case 1: {
                         // we only have one left to match...
@@ -750,17 +728,54 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                         res.length = wrapper->pos - buffer_start_pos;
                         // note that the lexer has pushed past  all the underscores
                         // but we are now in a backtracking state.
-                        if (end_char_count > 1) {
-                            // if we parse further and find the end result
-                            // is EMPHASIS_STAR, invalidate
-                            ParseResult attempt = parse_star(wrapper, stack);
-                            if (attempt.success && attempt.token == EMPHASIS_STAR) {
-                                res.success = false;
-                            } else {
-                                lex_backtrack_n(wrapper, wrapper->pos - end_pos);
+                        if (end_char_count == 1 && isalpha(next_char)) {
+                            res.success = false;
+                            return res;
+                        } else if (end_char_count > 1) {
+                            // under this condition the associated
+                            // parse is invalid
+                            // if we parse further in case there is more to invalidate
+                            ParseResult attempt = parse_under(wrapper, stack);
+                            if (attempt.success) {
+                                switch (attempt.token) {
+                                    case EMPHASIS_UNDER: {
+                                        dont_parse_result(&attempt, stack);
+                                    }
+                                    case STRONG_UNDER: {
+                                        size_t index = dont_parse_result(&attempt, stack);
+                                        if (index < stack->size) {
+                                            ParseResult *next_res = &stack->contents[index];
+                                            Pos pos_start = attempt.range.start;
+                                            pos_start.col += 2;
+                                            if (attempt.token == EMPHASIS_UNDER &&
+                                                pos_eq(&pos_start, &next_res->range.start)) {
+                                                dont_parse_result(next_res, stack);
+                                            }
+                                        }
+
+                                    }
+                                    default: {
+
+                                    }
+                                }
                             }
+                            // else {
+                            //     lex_backtrack_n(wrapper, wrapper->pos - end_pos);
+                            // }
+                            ParseResult emph_end = new_parse_result();
+                            emph_end.token = DO_NOT_PARSE;
+                            emph_end.range.start = res.range.end;
+                            emph_end.range.end = emph_end.range.start;
+                            emph_end.range.start.col--;
+                            emph_end.length = 1;
+                            stack_insert(stack, emph_end);
+                            res.token = DO_NOT_PARSE;
+                            res.range.end = res.range.start;
+                            res.range.end.col++;
+                            res.success = true;
+                            res.length = 1;
                         }
-                        if (stack_insert(stack, res)==not_found) {
+                        if (stack_insert(stack, res) == not_found) {
                             res.success = false;
                         }
                         fprintf(stderr, "returning: ");
@@ -772,20 +787,39 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                         switch (end_char_count) {
                             case 1: {
                                 // this may invalidate our current  scope
-                                lex_backtrack_n(wrapper, 1);
-                                ParseResult attempt = parse_star(wrapper, stack);
-                                // if it wasn't successful, then this token will
-                                // also not be successful
-                                if (!attempt.success) {
-                                    fprintf(stderr, "returning failure: ");
-                                    print_parse_result(&res);
-                                    return res;
-                                }
-                                fprintf(stderr, "successful internal parse... lexer at: ");
-                                Pos _pos = lex_current_position(wrapper);
-                                print_pos(&_pos);
                                 lookahead = lex_lookahead(wrapper);
-                                continue;
+                                lex_backtrack_n(wrapper, 1);
+
+                                // __something _t... <- handles this case
+                                if (!is_whitespace(lookahead) && is_whitespace(last_char)) {
+                                    // should only parse if last space was whitespace
+                                    ParseResult attempt = parse_under(wrapper, stack);
+                                    // if it wasn't successful, then this token will
+                                    // also not be successful... i think...
+                                    if (!attempt.success) {
+                                        fprintf(stderr, "returning failure: ");
+                                        res.success = true;
+                                        res.token = DO_NOT_PARSE;
+                                        res.range.end = res.range.start;
+                                        res.range.end.col += 2;
+                                        print_parse_result(&res);
+                                        return res;
+                                    }
+                                    fprintf(stderr, "successful internal parse... lexer at: ");
+                                    Pos _pos = lex_current_position(wrapper);
+                                    print_pos(&_pos);
+
+                                    lex_backtrack_n(wrapper, 1);
+                                    last_char = lex_lookahead(wrapper);
+                                    lex_advance(wrapper, false);
+                                    continue;
+                                }
+                                // otherwise just skip this token and continue
+                                // to try and find the ending.
+                                lex_advance(wrapper, false);
+                                break;
+
+
                             }
                             default: {
                                 // no matter how many match here. we have
@@ -793,8 +827,19 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                 lex_backtrack_n(wrapper, end_char_count - 2);
                                 res.range.end = lex_current_position(wrapper);
                                 res.success = true;
-                                res.token = STRONG_STAR;
+                                res.token = STRONG_UNDER;
                                 res.length = wrapper->pos - buffer_start_pos;
+                                // if the next character after the stream
+                                // of underscores is some alphabet, then this
+                                // will invalidate the current token
+                                if (isalpha(next_char)) {
+                                    res.success = false;
+                                }
+                                // // if it is greater than 2, force the next remaining positions
+                                // // to not be parsed.
+                                // if (end_char_count > 2) {
+                                //     dont_parse_next_n(wrapper, stack, end_char_count - 2);
+                                // }
                                 // note that the lexer has pushed past  all the stars
                                 // but we are now in a backtracking state.
                                 if (stack_insert(stack, res)==not_found) {
@@ -900,6 +945,7 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
             }
                 break;
         }
+        last_char = lookahead;
         lex_advance(wrapper, false);
         lookahead = lex_lookahead(wrapper);
     }
@@ -1038,6 +1084,8 @@ static void print_valid_symbols(const bool *valid_symbols) {
     fprintf(stderr, "EMPHASIS_UNDER_END=%d, ", valid_symbols[EMPHASIS_UNDER_END]);
     fprintf(stderr, "STRONG_STAR_START=%d, ", valid_symbols[STRONG_STAR_START]);
     fprintf(stderr, "STRONG_STAR_END=%d, ", valid_symbols[STRONG_STAR_END]);
+    fprintf(stderr, "STRONG_UNDER_START=%d, ", valid_symbols[STRONG_UNDER_START]);
+    fprintf(stderr, "STRONG_UNDER_END=%d, ", valid_symbols[STRONG_UNDER_END]);
     fprintf(stderr, "NO_PARSE=%d, ", valid_symbols[NO_PARSE]);
     fprintf(stderr, "ERROR=%d", valid_symbols[ERROR]);
     fprintf(stderr, "]\n");
