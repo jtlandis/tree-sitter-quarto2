@@ -47,3 +47,5 @@ zig-out/
 *.zip
 
 *_files/
+
+/.quarto/

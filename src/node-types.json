@@ -23,6 +23,10 @@
       "required": true,
       "types": [
         {
+          "type": "emph",
+          "named": true
+        },
+        {
           "type": "emph_end",
           "named": true
         },
@@ -31,19 +35,15 @@
           "named": true
         },
         {
-          "type": "line_break",
-          "named": true
-        },
-        {
-          "type": "line_end",
-          "named": true
-        },
-        {
           "type": "literal",
           "named": true
         },
         {
           "type": "puncuation",
+          "named": true
+        },
+        {
+          "type": "strong",
           "named": true
         },
         {
@@ -121,6 +121,10 @@
           "named": true
         },
         {
+          "type": "strong",
+          "named": true
+        },
+        {
           "type": "symbols",
           "named": true
         },
@@ -157,6 +161,10 @@
         },
         {
           "type": "puncuation",
+          "named": true
+        },
+        {
+          "type": "strong",
           "named": true
         },
         {
@@ -199,6 +207,10 @@
           "named": true
         },
         {
+          "type": "strong",
+          "named": true
+        },
+        {
           "type": "symbols",
           "named": true
         },
@@ -235,6 +247,10 @@
         },
         {
           "type": "puncuation",
+          "named": true
+        },
+        {
+          "type": "strong",
           "named": true
         },
         {
@@ -277,6 +293,10 @@
           "named": true
         },
         {
+          "type": "strong",
+          "named": true
+        },
+        {
           "type": "symbols",
           "named": true
         },
@@ -313,6 +333,10 @@
         },
         {
           "type": "puncuation",
+          "named": true
+        },
+        {
+          "type": "strong",
           "named": true
         },
         {
@@ -376,6 +400,10 @@
         },
         {
           "type": "puncuation",
+          "named": true
+        },
+        {
+          "type": "strong",
           "named": true
         },
         {
@@ -483,6 +511,53 @@
     }
   },
   {
+    "type": "strong",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "emph",
+          "named": true
+        },
+        {
+          "type": "line_break",
+          "named": true
+        },
+        {
+          "type": "line_end",
+          "named": true
+        },
+        {
+          "type": "literal",
+          "named": true
+        },
+        {
+          "type": "puncuation",
+          "named": true
+        },
+        {
+          "type": "strong_end",
+          "named": true
+        },
+        {
+          "type": "strong_start",
+          "named": true
+        },
+        {
+          "type": "symbols",
+          "named": true
+        },
+        {
+          "type": "word",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "symbols",
     "named": true,
     "fields": {}
@@ -566,6 +641,14 @@
   },
   {
     "type": "single_quote",
+    "named": true
+  },
+  {
+    "type": "strong_end",
+    "named": true
+  },
+  {
+    "type": "strong_start",
     "named": true
   },
   {

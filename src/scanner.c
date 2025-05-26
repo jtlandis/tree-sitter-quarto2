@@ -17,11 +17,13 @@ enum TokenType {
   EMPHASIS_UNDER_END,
   STRONG_STAR_START,
   STRONG_STAR_END,
+  NO_PARSE,
   ERROR, //General Emphasis
 };
 
 enum ParseToken {
     NONE,
+    DO_NOT_PARSE,
     EMPHASIS_STAR,
     EMPHASIS_UNDER,
     STRONG_STAR,
@@ -186,6 +188,10 @@ static ParseResult new_parse_result() {
 typedef Array(ParseResult) ParseResultArray;
 typedef Array(uint32_t) IndexArray;
 
+static bool pos_within_range(Pos *x, Range *y) {
+    return pos_le(x, &y->end) && pos_ge(x, &y->start);
+}
+
 /// x:   |----|
 /// y:  |-------|
 static bool range_within(Range *x, Range *y) {
@@ -261,24 +267,48 @@ static size_t stack_insert(ParseResultArray* array, ParseResult element) {
 
 
 
-static size_t stack_find(ParseResultArray *array, Pos pos, enum ParseToken token, bool end) {
+static size_t stack_find(ParseResultArray *array, Pos *pos, enum ParseToken token, bool end) {
     ParseResult *element;
     if (end) {
         for (size_t i = 0; i < array->size; i++) {
             element = &array->contents[i];
-            if (element->token == token && pos_eq(&element->range.end, &pos)) {
+            if (element->token == token && pos_eq(&element->range.end, pos)) {
                 return i;
             }
         }
     } else {
         for (size_t i = 0; i < array->size; i++) {
             element = &array->contents[i];
-            if (element->token == token && pos_eq(&element->range.start, &pos)) {
+            if (element->token == token && pos_eq(&element->range.start, pos)) {
                 return i;
             }
         }
     }
     return not_found;
+}
+
+static size_t stack_find_within(ParseResultArray *array, Pos *pos, enum ParseToken token) {
+     ParseResult *element;
+    for (size_t i = 0; i < array->size; i++) {
+        element = &array->contents[i];
+        if (element->token == token && pos_within_range(pos, &element->range)) {
+            return i;
+        }
+    }
+    return not_found;
+}
+
+static size_t stack_find_exact(ParseResultArray *array,  ParseResult *res) {
+    ParseResult *element;
+   for (size_t i = 0; i < array->size; i++) {
+       element = &array->contents[i];
+       if (element->token == res->token &&
+           pos_eq(&element->range.start, &res->range.start) &&
+           pos_eq(&element->range.end, &res->range.end)) {
+           return i;
+       }
+   }
+   return not_found;
 }
 
 static void print_pos(const Pos *pos) {
@@ -354,8 +384,9 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
         res.success = true;
         res.range.end = lex_current_position(wrapper);
         res.length = char_count;
+        res.token = DO_NOT_PARSE;
         wrapper->lexer->mark_end(wrapper->lexer);
-        fprintf(stderr, "returning a NONE result:");
+        fprintf(stderr, "returning a NO_PARSE result:");
         print_parse_result(&res);
         fprintf(stderr, "\n");
         stack_insert(stack, res);
@@ -395,8 +426,42 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
                             // is EMPHASIS_STAR, invalidate
                             ParseResult attempt = parse_star(wrapper, stack);
                             if (attempt.success && attempt.token == EMPHASIS_STAR) {
-                                attempt.token = NONE;
-                                res.success = false;
+                                size_t index = stack_find(stack, &attempt.range.start, EMPHASIS_STAR, false);
+                                ParseResult *stack_res = &stack->contents[index];
+                                if (pos_eq(&attempt.range.end, &stack_res->range.end)) {
+                                    // remove it from the stack
+                                    array_erase(stack, index);
+                                    // isert special - "no parse" tokens
+                                    ParseResult emph_start = new_parse_result();
+                                    emph_start.token = DO_NOT_PARSE;
+                                    emph_start.range.start = attempt.range.start;
+                                    emph_start.range.end = emph_start.range.start;
+                                    emph_start.length = 1;
+                                    emph_start.range.end.col++;
+                                    fprintf(stderr, "attempting to add DO_NOT_PARSE: ");
+                                    print_parse_result(&emph_start);
+                                    stack_insert(stack, emph_start);
+                                    ParseResult emph_end = new_parse_result();
+                                    emph_end.token = DO_NOT_PARSE;
+                                    emph_end.range.end = attempt.range.end;
+                                    emph_end.range.start = emph_end.range.end;
+                                    emph_end.range.start.col--;
+                                    emph_end.length = 1;
+                                    fprintf(stderr, "attempting to add DO_NOT_PARSE: ");
+                                    print_parse_result(&emph_end);
+                                    stack_insert(stack, emph_end);
+                                }
+                                ParseResult emph_end = new_parse_result();
+                                emph_end.token = DO_NOT_PARSE;
+                                emph_end.range.start = res.range.end;
+                                emph_end.range.end = emph_end.range.start;
+                                emph_end.range.start.col--;
+                                emph_end.length = 1;
+                                stack_insert(stack, emph_end);
+                                res.token = DO_NOT_PARSE;
+                                res.range.end = res.range.start;
+                                res.range.end.col++;
+                                res.success = true;
                             } else {
                                 lex_backtrack_n(wrapper, wrapper->pos - end_pos);
                             }
@@ -900,22 +965,23 @@ static void print_valid_symbols(const bool *valid_symbols) {
     fprintf(stderr, "EMPHASIS_UNDER_END=%d, ", valid_symbols[EMPHASIS_UNDER_END]);
     fprintf(stderr, "STRONG_STAR_START=%d, ", valid_symbols[STRONG_STAR_START]);
     fprintf(stderr, "STRONG_STAR_END=%d, ", valid_symbols[STRONG_STAR_END]);
+    fprintf(stderr, "NO_PARSE=%d, ", valid_symbols[NO_PARSE]);
     fprintf(stderr, "ERROR=%d", valid_symbols[ERROR]);
     fprintf(stderr, "]\n");
 }
 
 bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, const bool *valid_symbols) {
 
-  if (valid_symbols[ERROR]) {
-      return false;
-  }
+
   ScannerState *state = (ScannerState *)payload;
   print_scanner_state(state);
   fprintf(stderr, "scanner invoked before: %c - is alpha: %i\n",
       lexer->lookahead, isalnum((int)lexer->lookahead));
   print_valid_symbols(valid_symbols);
   if (valid_symbols[ERROR]) {
-      fprintf(stderr, "ERROR is a valid symbol\n");
+      fprintf(stderr, "ERROR is a valid symbol. do not handle\n");
+      // lexer->mark_end(lexer);
+      // lexer->result_symbol = ERROR;
       return false;
   }
   // Skip whitespace
@@ -933,6 +999,23 @@ bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, con
     lexer->advance(lexer, false); // Consume the newline
     lexer->result_symbol = LINE_END; // Emit the LINE_END token
     return true;
+  }
+
+  // handle NO_PARSE
+  if (valid_symbols[NO_PARSE]) {
+      state->pos.col = lexer->get_column(lexer);
+      size_t index = stack_find(&state->results, &state->pos, DO_NOT_PARSE, false);
+      if (index < not_found) {
+          ParseResult *res = &state->results.contents[index];
+          for (uint32_t i = 0; i < res->length; i++) {
+              lexer->advance(lexer, false);
+          }
+          lexer->mark_end(lexer);
+          lexer->result_symbol = NO_PARSE;
+          array_erase(&state->results, index);
+          return true;
+      }
+
   }
 
   // detect  star
@@ -958,7 +1041,7 @@ bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, con
       print_pos(&possible_pos);
       fprintf(stderr, "\n");
       if (valid_symbols[EMPHASIS_STAR_END]) {
-          size_t index = stack_find(&state->results, possible_pos, EMPHASIS_STAR, true);
+          size_t index = stack_find(&state->results, &possible_pos, EMPHASIS_STAR, true);
           if (index < not_found) {
               lexer->result_symbol = EMPHASIS_STAR_END;
               array_erase(&state->results, index);
@@ -969,7 +1052,7 @@ bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, con
       if (valid_symbols[EMPHASIS_STAR_START]) {
           // the start position should be one step prior
           possible_pos.col--;
-          size_t index = stack_find(&state->results, possible_pos, EMPHASIS_STAR, false);
+          size_t index = stack_find(&state->results, &possible_pos, EMPHASIS_STAR, false);
           if (index < not_found) {
               lexer->result_symbol = EMPHASIS_STAR_START;
               return true;
@@ -981,7 +1064,7 @@ bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, con
       if (valid_symbols[STRONG_STAR_START] || valid_symbols[STRONG_STAR_END]) {
           possible_pos.col++;
           if (valid_symbols[STRONG_STAR_END]) {
-              size_t index = stack_find(&state->results, possible_pos, STRONG_STAR, true);
+              size_t index = stack_find(&state->results, &possible_pos, STRONG_STAR, true);
               if (index < not_found) {
                   lex_advance(&wrapper, false);
                   lexer->mark_end(lexer);
@@ -993,7 +1076,7 @@ bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, con
           if (valid_symbols[STRONG_STAR_START]) {
               //again, the start will be on the other side
               possible_pos.col -= 2;
-              size_t index = stack_find(&state->results, possible_pos, STRONG_STAR, false);
+              size_t index = stack_find(&state->results, &possible_pos, STRONG_STAR, false);
               if (index < not_found) {
                   lex_advance(&wrapper, false);
                   lexer->mark_end(lexer);
@@ -1019,6 +1102,14 @@ bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, con
           if (res.success) {
               if (res.token == NONE) {
                   lexer->result_symbol = ERROR;
+                  return true;
+              }
+              if (res.token == DO_NOT_PARSE) {
+                  size_t index = stack_find_exact(&state->results, &res);
+                  if (index < not_found) {
+                      array_erase(&state->results, index);
+                  }
+                  lexer->result_symbol = NO_PARSE;
                   return true;
               }
               if (valid_symbols[EMPHASIS_STAR_START] && res.token == EMPHASIS_STAR) {
