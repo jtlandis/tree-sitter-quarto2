@@ -17,6 +17,8 @@ enum TokenType {
   EMPHASIS_UNDER_END,
   STRONG_STAR_START,
   STRONG_STAR_END,
+  STRONG_UNDER_START,
+  STRONG_UNDER_END,
   NO_PARSE,
   ERROR, //General Emphasis
 };
@@ -353,8 +355,79 @@ static ParseResult parse_inline(LexWrap *wrapper, ParseResultArray* stack) {
         case '*':
             res = parse_star(wrapper, stack);
             break;
+        case '_':
+            res = parse_under(wrapper, stack);
     }
     return res;
+}
+
+/// takes a result object, finds it in the stack and then
+/// add tokens that indicate it should not be parsed.
+/// removes the element from the stack.
+///
+/// does nothing if the result does not match exactly.
+static size_t dont_parse_result(ParseResult *result, ParseResultArray *array) {
+    size_t index = stack_find_exact(array, result);
+    if (index < not_found) {
+        ParseResult *element = &array->contents[index];
+        switch (element->token) {
+            case EMPHASIS_STAR:
+            case EMPHASIS_UNDER: {
+                ParseResult emph_start = new_parse_result();
+                emph_start.token = DO_NOT_PARSE;
+                emph_start.range.start = element->range.start;
+                ParseResult emph_end = new_parse_result();
+                emph_end.token = DO_NOT_PARSE;
+                emph_end.range.end = element->range.end;
+                emph_start.range.end = emph_start.range.start;
+                emph_start.length = 1;
+                emph_start.range.end.col += 1;
+                emph_end.range.start = emph_end.range.end;
+                emph_end.range.start.col -= 1;
+                emph_end.length = 1;
+                array_erase(array, index);
+                stack_insert(array, emph_start);
+                stack_insert(array, emph_end);
+                break;
+            }
+            case STRONG_STAR:
+            case STRONG_UNDER: {
+                ParseResult strong_start = new_parse_result();
+                strong_start.token = DO_NOT_PARSE;
+                strong_start.range.start = element->range.start;
+                ParseResult strong_end = new_parse_result();
+                strong_end.token = DO_NOT_PARSE;
+                strong_end.range.end = element->range.end;
+                strong_start.range.end = strong_start.range.start;
+                strong_start.length = 2;
+                strong_start.range.end.col += 2;
+                strong_end.range.start = strong_end.range.end;
+                strong_end.range.start.col -= 2;
+                strong_end.length = 2;
+                array_erase(array, index);
+                stack_insert(array, strong_start);
+                stack_insert(array, strong_end);
+            }
+
+            default: {
+
+            }
+        }
+    }
+    return index;
+}
+
+static void dont_parse_next_n(LexWrap *wrapper, ParseResultArray *stack, uint32_t n) {
+    ParseResult result = new_parse_result();
+    result.range.start = lex_current_position(wrapper);
+    for (uint32_t i = 0; i < n; i++) {
+        lex_advance(wrapper, false);
+    }
+    result.range.end = lex_current_position(wrapper);
+    result.length = n;
+    result.success = true;
+    result.token = DO_NOT_PARSE;
+    stack_insert(stack, result);
 }
 
 static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
