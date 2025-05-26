@@ -723,57 +723,79 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                         lex_backtrack_n(wrapper, end_char_count - 1);
                         uint32_t end_pos = wrapper->pos;
                         res.range.end = lex_current_position(wrapper);
-                        res.success = true;
                         res.token = EMPHASIS_UNDER;
                         res.length = wrapper->pos - buffer_start_pos;
                         // note that the lexer has pushed past  all the underscores
                         // but we are now in a backtracking state.
-                        if (end_char_count == 1 && isalpha(next_char)) {
-                            res.success = false;
-                            return res;
-                        } else if (end_char_count > 1) {
-                            // under this condition the associated
-                            // parse is invalid
-                            // if we parse further in case there is more to invalidate
-                            ParseResult attempt = parse_under(wrapper, stack);
-                            if (attempt.success) {
-                                switch (attempt.token) {
-                                    case EMPHASIS_UNDER: {
-                                        dont_parse_result(&attempt, stack);
-                                    }
-                                    case STRONG_UNDER: {
-                                        size_t index = dont_parse_result(&attempt, stack);
-                                        if (index < stack->size) {
-                                            ParseResult *next_res = &stack->contents[index];
-                                            Pos pos_start = attempt.range.start;
-                                            pos_start.col += 2;
-                                            if (attempt.token == EMPHASIS_UNDER &&
-                                                pos_eq(&pos_start, &next_res->range.start)) {
-                                                dont_parse_result(next_res, stack);
-                                            }
-                                        }
-
-                                    }
-                                    default: {
-
-                                    }
-                                }
-                            }
-                            // else {
-                            //     lex_backtrack_n(wrapper, wrapper->pos - end_pos);
-                            // }
-                            ParseResult emph_end = new_parse_result();
-                            emph_end.token = DO_NOT_PARSE;
-                            emph_end.range.start = res.range.end;
-                            emph_end.range.end = emph_end.range.start;
-                            emph_end.range.start.col--;
-                            emph_end.length = 1;
-                            stack_insert(stack, emph_end);
-                            res.token = DO_NOT_PARSE;
-                            res.range.end = res.range.start;
-                            res.range.end.col++;
+                        if (end_char_count == 1 && !isalpha(next_char)) {
                             res.success = true;
-                            res.length = 1;
+                            // fprintf(stderr, "returning: ");
+                            // print_parse_result(&res);
+                            // if (stack_insert(stack, res)==not_found) {
+                            //     res.success = false;
+                            // }
+                            // return res;
+                        } else if (end_char_count > 1) {
+
+                            // This could potentionally be parsed further
+                            // if the last character was NOT an alphabet
+                            if (!isalpha(last_char)) {
+                                // return back one
+                                lex_backtrack_n(wrapper, 1);
+                                ParseResult attempt = parse_under(wrapper, stack);
+                                if (attempt.success && attempt.token == EMPHASIS_UNDER) {
+                                    dont_parse_result(&attempt, stack);
+                                }
+                                // otherwise it was unsuccessful, or successfull and
+                                // a strong_under token result
+                                // we can continue parsing now...
+                                fprintf(stderr, "successful inner parse - moving on\n");
+                                last_char = '_';
+                                lookahead = lex_lookahead(wrapper);
+                                continue;
+
+                            }
+                            // if it is alphabet - the current token is still
+                            // invalid.
+
+                            // if (attempt.success && attempt.token == EMPHASIS_UNDER) {
+                            //     switch (attempt.token) {
+                            //         case EMPHASIS_UNDER: {
+                            //             dont_parse_result(&attempt, stack);
+                            //         }
+                            //         case STRONG_UNDER: {
+                            //             size_t index = dont_parse_result(&attempt, stack);
+                            //             if (index < stack->size) {
+                            //                 ParseResult *next_res = &stack->contents[index];
+                            //                 Pos pos_start = attempt.range.start;
+                            //                 pos_start.col += 2;
+                            //                 if (attempt.token == EMPHASIS_UNDER &&
+                            //                     pos_eq(&pos_start, &next_res->range.start)) {
+                            //                     dont_parse_result(next_res, stack);
+                            //                 }
+                            //             }
+
+                            //         }
+                            //         default: {
+
+                            //         }
+                            //     }
+                            // }
+                            // // else {
+                            // //     lex_backtrack_n(wrapper, wrapper->pos - end_pos);
+                            // // }
+                            // ParseResult emph_end = new_parse_result();
+                            // emph_end.token = DO_NOT_PARSE;
+                            // emph_end.range.start = res.range.end;
+                            // emph_end.range.end = emph_end.range.start;
+                            // emph_end.range.start.col--;
+                            // emph_end.length = 1;
+                            // stack_insert(stack, emph_end);
+                            // res.token = DO_NOT_PARSE;
+                            // res.range.end = res.range.start;
+                            // res.range.end.col++;
+                            // res.success = true;
+                            // res.length = 1;
                         }
                         if (stack_insert(stack, res) == not_found) {
                             res.success = false;
