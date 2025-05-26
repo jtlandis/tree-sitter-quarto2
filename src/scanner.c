@@ -1125,78 +1125,111 @@ bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, con
   }
 
 
-  // // detect emphasis end
-  // if (lexer->lookahead == '*' && valid_symbols[EMPHASIS_STAR_END]) {
-  //     fprintf(stderr, "looking for emphasis ending symbol\n");
-  //     state->pos.col = lexer->get_column(lexer);
-  //     LexWrap wrapper = new_lexer(lexer, state->pos);
-  //     lex_advance(&wrapper, false);
-  //     lexer->mark_end(lexer);
-  //     Pos possible_end = lex_current_position(&wrapper);
-  //     fprintf(stderr, "lex is at: ");
-  //     print_pos(&possible_end);
-  //     // ideally the first element of the stack is correct...
-  //     ParseResult *first = array_get(&state->results, 0);
-  //     fprintf(stderr, "\n first element in stack is...\n");
-  //     print_parse_result(first);
-  //     if (pos_eq(&first->end, &possible_end) &&
-  //         first->token == EMPHASIS_STAR) {
-  //         lexer->result_symbol = EMPHASIS_STAR_END;
-  //         array_erase(&state->results, 0);
-  //         return true;
-  //     }
+  // detect  underscore
+  if (lexer->lookahead == '_' && (
+      valid_symbols[EMPHASIS_UNDER_START] ||
+      valid_symbols[STRONG_UNDER_START] ||
+      valid_symbols[EMPHASIS_UNDER_END] ||
+      valid_symbols[STRONG_UNDER_END]
+  )) {
+      fprintf(stderr, "looking for strong or emph under\n");
+      // get current start position
+      state->pos.col = lexer->get_column(lexer);
+      LexWrap wrapper = new_lexer(lexer, state->pos);
+      lex_advance(&wrapper, false);
+      // possible end if just an emphasis
+      lexer->mark_end(lexer);
+      // before we move the lexer forward check
+      // if emphasis is valid... The grammar could
+      // enable STRONG_STAR_END and EMPH_STAR_END
+      // at the same time...
+      Pos possible_pos = lex_current_position(&wrapper);
+      fprintf(stderr, "lex is at: ");
+      print_pos(&possible_pos);
+      fprintf(stderr, "\n");
+      if (valid_symbols[EMPHASIS_UNDER_END]) {
+          size_t index = stack_find(&state->results, &possible_pos, EMPHASIS_UNDER, true);
+          if (index < not_found) {
+              lexer->result_symbol = EMPHASIS_UNDER_END;
+              array_erase(&state->results, index);
+              return true;
+          }
+      }
 
-  // }
+      if (valid_symbols[EMPHASIS_UNDER_START]) {
+          // the start position should be one step prior
+          possible_pos.col--;
+          size_t index = stack_find(&state->results, &possible_pos, EMPHASIS_UNDER, false);
+          if (index < not_found) {
+              lexer->result_symbol = EMPHASIS_UNDER_START;
+              return true;
+          }
+          possible_pos.col++;
+      }
 
-  // // detect emphasis end
-  // if (lexer->lookahead == '*' && valid_symbols[STRONG_STAR_END]) {
-  //     fprintf(stderr, "looking for strong ending symbol\n");
-  //     state->pos.col = lexer->get_column(lexer);
-  //     LexWrap wrapper = new_lexer(lexer, state->pos);
-  //     lex_advance(&wrapper, false);
-  //     if (lexer->lookahead != '*') {
-  //         return false;
-  //     }
-  //     lex_advance(&wrapper, false);
-  //     lexer->mark_end(lexer);
-  //     Pos possible_end = lex_current_position(&wrapper);
-  //     fprintf(stderr, "lex is at: ");
-  //     print_pos(&possible_end);
-  //     // ideally the first element of the stack is correct...
-  //     ParseResult *first = array_get(&state->results, 0);
-  //     fprintf(stderr, "\n first element in stack is...\n");
-  //     print_parse_result(first);
-  //     if (pos_eq(&first->end, &possible_end) &&
-  //         first->token == STRONG_STAR) {
-  //         lexer->result_symbol = STRONG_STAR_END;
-  //         array_erase(&state->results, 0);
-  //         return true;
-  //     }
+      // without actually advancing the lexer, check the stack
+      if (valid_symbols[STRONG_UNDER_START] || valid_symbols[STRONG_UNDER_END]) {
+          possible_pos.col++;
+          if (valid_symbols[STRONG_UNDER_END]) {
+              size_t index = stack_find(&state->results, &possible_pos, STRONG_UNDER, true);
+              if (index < not_found) {
+                  lex_advance(&wrapper, false);
+                  lexer->mark_end(lexer);
+                  lexer->result_symbol = STRONG_UNDER_END;
+                  array_erase(&state->results, index);
+                  return true;
+              }
+          }
+          if (valid_symbols[STRONG_UNDER_START]) {
+              //again, the start will be on the other side
+              possible_pos.col -= 2;
+              size_t index = stack_find(&state->results, &possible_pos, STRONG_UNDER, false);
+              if (index < not_found) {
+                  lex_advance(&wrapper, false);
+                  lexer->mark_end(lexer);
+                  lexer->result_symbol = STRONG_UNDER_START;
+                  return true;
+              }
+              possible_pos.col += 2;
+          }
+      }
 
-  // }
+      // failed to match any pre-parsed info on the stack.
+      // Its not the time to advance the lexer if STRONG match is possible.
+      if (valid_symbols[EMPHASIS_UNDER_START] || valid_symbols[STRONG_UNDER_START]) {
 
-  // // Detect emphasis end
-  // if (state->emphasis.within &&
-  //     state->emphasis.row == 0 &&
-  //     ((lexer->lookahead == '*' && valid_symbols[EMPHASIS_STAR_END]) ||
-  //         (lexer->lookahead == '_' && valid_symbols[EMPHASIS_UNDER_END]))) {
-  //   // fprintf(stderr, "looking for end star, detected whitespace before %i\n", skipped_whitespace);
-  //   fprintf(stderr, "looking for ending - calculating column from lexer\n");
-  //   int32_t emph_char = lexer->lookahead;
-  //   if (lexer->get_column(lexer) == state->emphasis.col) {
-  //       lexer->advance(lexer, false);
-  //       lexer->mark_end(lexer);
-  //       if (emph_char == '*') {
-  //           lexer->result_symbol = EMPHASIS_STAR_END; // Emit the EMPHASIS_STAR_END token
-  //       } else {
-  //           lexer->result_symbol = EMPHASIS_UNDER_END;
-  //       }
-  //       state->emphasis.col = 0;
-  //       state->emphasis.within = false; // Update the state
-  //       return true;
-  //   }
+          if (lexer->lookahead == '_' && valid_symbols[STRONG_UNDER_START]) {
+              lex_advance(&wrapper, false);
+              lexer->mark_end(lexer);
+          }
+          // reset wrapper to begining of this scan.
+          lex_backtrack_n(&wrapper, wrapper.buffer.size);
+          // try and handle this parse...
+          ParseResult res = parse_under(&wrapper, &state->results);
+          if (res.success) {
+              if (res.token == NONE) {
+                  lexer->result_symbol = ERROR;
+                  return true;
+              }
+              if (res.token == DO_NOT_PARSE) {
+                  size_t index = stack_find_exact(&state->results, &res);
+                  if (index < not_found) {
+                      array_erase(&state->results, index);
+                  }
+                  lexer->result_symbol = NO_PARSE;
+                  return true;
+              }
+              if (valid_symbols[EMPHASIS_UNDER_START] && res.token == EMPHASIS_UNDER) {
+                  lexer->result_symbol = EMPHASIS_UNDER_START;
+                  return true;
+              } else if (valid_symbols[STRONG_UNDER_START] && res.token == STRONG_UNDER){
+                  lexer->result_symbol = STRONG_UNDER_START;
+                  return true;
+              }
+          }
+      }
 
-  // }
+  }
 
   return false; // No token recognized
 }
