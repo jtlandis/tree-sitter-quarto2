@@ -269,11 +269,13 @@ static size_t stack_insert(ParseResultArray* array, ParseResult element) {
                 }
                 case DISJOINT_LESS: {
                     array_insert(array, i, element);
-                    return i;
+                    out = i;
+                    goto func_end;
                 }
                 case DISJOINT_GREATER: {
                     array_insert(array, i + 1, element);
-                    return i + 1;
+                    out = i + 1;
+                    goto func_end;
                 }
                 case CHILD: {
                     continue;
@@ -281,7 +283,13 @@ static size_t stack_insert(ParseResultArray* array, ParseResult element) {
             }
         }
     }
-    return not_found;
+
+    func_end: {
+        fprintf(stderr, "insert was %ssuccessful: \n", out==not_found ? "un" : "");
+        print_stack(array);
+        return out;
+    }
+
 
 }
 
@@ -335,12 +343,7 @@ static void print_pos(const Pos *pos) {
     fprintf(stderr, "Pos { row: %u, col: %u }", pos->row, pos->col);
 }
 
-static void print_parse_result(const ParseResult *res) {
-    fprintf(stderr, "ParseResult { success: %d, length: %u, range: ", res->success, res->length);
-    fprintf(stderr, "[%i, %i] - ", res->range.start.row, res->range.start.col);
-    fprintf(stderr, "[%i, %i]", res->range.end.row, res->range.end.col);
-    fprintf(stderr, ", token: %d }\n", res->token);
-}
+
 
 
 static bool is_whitespace(int32_t char_) {
@@ -364,6 +367,7 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack);
 static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack);
 
 static ParseResult parse_inline(LexWrap *wrapper, ParseResultArray* stack) {
+    fprintf(stderr, "calling parse_inline()\n");
     uint32_t stack_start_size = stack->size;
     uint32_t buffer_start_pos = wrapper->pos;
     ParseResult res = new_parse_result();
@@ -376,63 +380,73 @@ static ParseResult parse_inline(LexWrap *wrapper, ParseResultArray* stack) {
         case '_':
             res = parse_under(wrapper, stack);
     }
+    if (!res.success) {
+
+        res.range.end = lex_current_position(wrapper);
+        res.token = DO_NOT_PARSE;
+        res.length = wrapper->pos - buffer_start_pos;
+    }
+    fprintf(stderr, "inline parse results: ");
+    print_parse_result(&res);
     return res;
 }
 
-/// takes a result object, finds it in the stack and then
-/// add tokens that indicate it should not be parsed.
-/// removes the element from the stack.
-///
-/// does nothing if the result does not match exactly.
-static size_t dont_parse_result(ParseResult *result, ParseResultArray *array) {
-    size_t index = stack_find_exact(array, result);
-    if (index < not_found) {
-        ParseResult *element = &array->contents[index];
-        switch (element->token) {
-            case EMPHASIS_STAR:
-            case EMPHASIS_UNDER: {
-                ParseResult emph_start = new_parse_result();
-                emph_start.token = DO_NOT_PARSE;
-                emph_start.range.start = element->range.start;
-                ParseResult emph_end = new_parse_result();
-                emph_end.token = DO_NOT_PARSE;
-                emph_end.range.end = element->range.end;
-                emph_start.range.end = emph_start.range.start;
-                emph_start.length = 1;
-                emph_start.range.end.col += 1;
-                emph_end.range.start = emph_end.range.end;
-                emph_end.range.start.col -= 1;
-                emph_end.length = 1;
-                array_erase(array, index);
-                stack_insert(array, emph_start);
-                stack_insert(array, emph_end);
-                break;
-            }
-            case STRONG_STAR:
-            case STRONG_UNDER: {
-                ParseResult strong_start = new_parse_result();
-                strong_start.token = DO_NOT_PARSE;
-                strong_start.range.start = element->range.start;
-                ParseResult strong_end = new_parse_result();
-                strong_end.token = DO_NOT_PARSE;
-                strong_end.range.end = element->range.end;
-                strong_start.range.end = strong_start.range.start;
-                strong_start.length = 2;
-                strong_start.range.end.col += 2;
-                strong_end.range.start = strong_end.range.end;
-                strong_end.range.start.col -= 2;
-                strong_end.length = 2;
-                array_erase(array, index);
-                stack_insert(array, strong_start);
-                stack_insert(array, strong_end);
-            }
+/// takes a result object, and inserts appropriate DO_NOT_PARSE
+/// tokens into the stack. optionally, it will delete the result
+/// if the element exists in the stack
+static size_t dont_parse_result(ParseResult *result, ParseResultArray *array, bool remove) {
+    switch (result->token) {
+        case EMPHASIS_STAR:
+        case EMPHASIS_UNDER: {
+            ParseResult emph_start = new_parse_result();
+            emph_start.token = DO_NOT_PARSE;
+            emph_start.range.start = result->range.start;
+            ParseResult emph_end = new_parse_result();
+            emph_end.token = DO_NOT_PARSE;
+            emph_end.range.end = result->range.end;
+            emph_start.range.end = emph_start.range.start;
+            emph_start.length = 1;
+            emph_start.range.end.col += 1;
+            emph_end.range.start = emph_end.range.end;
+            emph_end.range.start.col -= 1;
+            emph_end.length = 1;
+            stack_insert(array, emph_start);
+            stack_insert(array, emph_end);
+            break;
+        }
+        case STRONG_STAR:
+        case STRONG_UNDER: {
+            ParseResult strong_start = new_parse_result();
+            strong_start.token = DO_NOT_PARSE;
+            strong_start.range.start = result->range.start;
+            ParseResult strong_end = new_parse_result();
+            strong_end.token = DO_NOT_PARSE;
+            strong_end.range.end = result->range.end;
+            strong_start.range.end = strong_start.range.start;
+            strong_start.length = 2;
+            strong_start.range.end.col += 2;
+            strong_end.range.start = strong_end.range.end;
+            strong_end.range.start.col -= 2;
+            strong_end.length = 2;
+            stack_insert(array, strong_start);
+            stack_insert(array, strong_end);
+        }
 
-            default: {
+        default: {
 
-            }
         }
     }
-    return index;
+
+    if (remove) {
+        size_t index = stack_find_exact(array, result);
+        if (index < not_found) {
+            array_erase(array, index);
+            return index;
+        }
+    }
+
+
+    return not_found;
 }
 
 static void dont_parse_next_n(LexWrap *wrapper, ParseResultArray *stack, uint32_t n) {
@@ -520,7 +534,7 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
                             // is EMPHASIS_STAR, invalidate
                             ParseResult attempt = parse_star(wrapper, stack);
                             if (attempt.success && attempt.token == EMPHASIS_STAR) {
-                                dont_parse_result(&attempt, stack);
+                                dont_parse_result(&attempt, stack, true);
                                 ParseResult emph_end = new_parse_result();
                                 emph_end.token = DO_NOT_PARSE;
                                 emph_end.range.start = res.range.end;
@@ -821,16 +835,13 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                     fprintf(stderr, "\n");
 
                                     lex_backtrack_n(wrapper, 2);
-                                    lookahead = lex_lookahead(wrapper);
-                                    wrapper->pos++;
-                                    // last_char = lex_lookahead(wrapper);
-                                    // lex_advance(wrapper, false);
-                                    break;
+                                    ParseResult res = parse_under(wrapper, stack);
+                                    if (!res.success) {
+                                        wrapper->pos = end_pos - 2;
+                                        dont_parse_next_n(wrapper, stack, 2);
+                                    }
                                 }
-                                // otherwise just skip this token and continue
-                                // to try and find the ending.
-                                lookahead = next_char;
-                                fprintf(stderr, "end of condition, lookahead is: %c\n", lex_lookahead(wrapper));
+
                                 break;
                             }
                             default: {
