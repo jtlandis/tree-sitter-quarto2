@@ -761,79 +761,129 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                         res.range.end = lex_current_position(wrapper);
                         res.token = EMPHASIS_UNDER;
                         res.length = wrapper->pos - buffer_start_pos;
-                        // note that the lexer has pushed past  all the underscores
-                        // but we are now in a backtracking state.
-                        if (end_char_count == 1 && !isalpha(next_char)) {
-                            res.success = true;
-                        } else if (end_char_count > 1) {
-                            fprintf(stderr, "foo\n");
-                            // This could potentionally be parsed further
-                            // if the last character was NOT an alphabet
-                            if (!isalpha(last_char)) {
-                                // return back one
-                                lex_backtrack_n(wrapper, 1);
-                                ParseResult attempt = parse_under(wrapper, stack);
-                                fprintf(stderr, "internal parse attempt:");
-                                print_parse_result(&attempt);
-                                // should be impossible to be successful AND EMPHASIS_UNDER
-                                if (attempt.success && attempt.token == EMPHASIS_UNDER) {
-                                    dont_parse_result(&attempt, stack);
-                                }
-                                // if it failed, then the first _ should be valid...
-                                if (!attempt.success) {
+                        // we do not know if it is valid yet...
+
+                        switch (end_char_count) {
+                            case 1: {
+                                // do we need to check that the next character
+                                // is syntax???
+                                if (!isalpha(next_char)) {
+                                    // if the next character is NOT alphabet
+                                    // then we can complete this case
                                     res.success = true;
-                                    wrapper->pos = end_pos - end_char_count + 1;
-                                } else {
-                                    // otherwise it successfull and
-                                    // a strong_under token result
-                                    // we can continue parsing now...
-                                    fprintf(stderr, "successful inner parse - moving on\n");
-                                    last_char = '_';
-                                    lookahead = lex_lookahead(wrapper);
-                                    continue;
+                                    stack_insert(stack, res);
+                                } else if (!isalpha(last_char)) {
+                                    // we know the next character IS alphabet,
+                                    // which automatically invalidates the current
+                                    // scope
+                                    ParseResult emph_start = new_parse_result();
+                                    emph_start.range.start = res.range.start;
+                                    emph_start.range.end = res.range.start;
+                                    emph_start.range.end.col++;
+                                    emph_start.success = true;
+                                    emph_start.token = DO_NOT_PARSE;
+                                    emph_start.length = 1;
+                                    stack_insert(stack, emph_start);
+                                    // however if the last character is NOT alphabet
+                                    // then it is possible to parse the next _.
+                                    lex_backtrack_n(wrapper, 1);
+                                    ParseResult res = parse_under(wrapper, stack);
+                                    if (!res.success) {
+                                        wrapper->pos = end_pos - 1;
+                                        dont_parse_next_n(wrapper, stack, 1);
+                                    }
                                 }
-                            } else {
+
+                                break;
+
+                            }
+                            case 2:  {
+                                // this invalidates all tokens...
+                                dont_parse_result(&res, stack, false);
+                                dont_parse_next_n(wrapper, stack, 1);
+                                break;
+                            }
+                            default: {
                                 res.success = true;
+                                dont_parse_next_n(wrapper, stack, 1);
+                                ParseResult attempt = parse_under(wrapper, stack);
+                                if (!attempt.success) {
+                                    dont_parse_result(&attempt, stack, false);
+                                }
+                                break;
                             }
                         }
-                        if (stack_insert(stack, res) == not_found) {
-                            res.success = false;
-                        }
-                        fprintf(stderr, "bar\n");
                         fprintf(stderr, "returning: ");
                         print_parse_result(&res);
                         return res;
                         break;
                     }
                     case 2: {
+                        // we do not know if it is valid yet...
+
                         switch (end_char_count) {
                             case 1: {
-                                // this may invalidate our current  scope
+                                // a single token cannot satisfy this condition
+                                // this is either parsible
+                                // or ignore this token
+                                // or invalidates the entire thing
+                                lex_backtrack_n(wrapper, 1);
+                                uint32_t end_pos = wrapper->pos;
+                                res.range.end = lex_current_position(wrapper);
+                                res.token = STRONG_UNDER;
+                                res.length = end_pos - buffer_start_pos;
 
-                                // __something _t... <- handles this case
-                                // only parse if next
-                                fprintf(stderr, "next char : %c -- last char: %c\n", next_char, last_char);
-                                if (!is_whitespace(next_char) && !isalpha(last_char)) {
-                                    fprintf(stderr, "within check condition\n");
-                                    lex_backtrack_n(wrapper, 1);
-                                    // should only parse if last space was whitespace
-                                    ParseResult attempt = parse_under(wrapper, stack);
-                                    // if it wasn't successful, then this token will
-                                    // also not be successful... i think...
-                                    if (!attempt.success) {
-                                        fprintf(stderr, "returning failure: ");
-                                        res.success = true;
-                                        res.token = DO_NOT_PARSE;
-                                        res.range.end = res.range.start;
-                                        res.range.end.col += 2;
-                                        print_parse_result(&res);
+                                if (!isalpha(last_char) && isalpha(next_char)) {
+
+                                    ParseResult res = parse_under(wrapper, stack);
+                                    if (!res.success) {
+                                        ParseResult strong_start = new_parse_result();
+                                        strong_start.range.start = res.range.start;
+                                        strong_start.range.end = res.range.start;
+                                        strong_start.range.end.col += 2;
+                                        strong_start.success = true;
+                                        strong_start.token = DO_NOT_PARSE;
+                                        strong_start.length = 2;
+                                        stack_insert(stack, strong_start);
+                                        wrapper->pos = end_pos - 1;
+                                        dont_parse_next_n(wrapper, stack, 1);
                                         return res;
                                     }
-                                    fprintf(stderr, "successful internal parse... lexer at: ");
-                                    Pos _pos = lex_current_position(wrapper);
-                                    print_pos(&_pos);
-                                    fprintf(stderr, "\n");
+                                    last_char = lex_lookahead(wrapper);
 
+                                } else {
+                                    // if we cannot parse it, we skip it
+                                    dont_parse_next_n(wrapper, stack, 1);
+                                    last_char = next_char;
+                                }
+                                // we need to continue
+                                lex_advance(wrapper, false);
+                                lookahead = lex_lookahead(wrapper);
+                                continue;
+                            }
+                            case 2:  {
+                                // do we need to check that the next character
+                                // is syntax???
+                                if (!isalpha(next_char)) {
+                                    // if the next character is NOT alphabet
+                                    // then we can complete this case
+                                    res.success = true;
+                                    stack_insert(stack, res);
+                                } else if (!isalpha(last_char)) {
+                                    // we know the next character IS alphabet,
+                                    // which automatically invalidates the current
+                                    // scope
+                                    uint32_t end_pos = wrapper->pos;
+                                    ParseResult strong_start = new_parse_result();
+                                    strong_start.range.start = res.range.start;
+                                    strong_start.range.end = res.range.start;
+                                    strong_start.range.end.col += 2;
+                                    strong_start.success = true;
+                                    strong_start.token = DO_NOT_PARSE;
+                                    strong_start.length = 2;
+                                    stack_insert(stack, strong_start);
+                                    // however if the last character is NOT alphabet
+                                    // then it is possible to parse the next _.
                                     lex_backtrack_n(wrapper, 2);
                                     ParseResult res = parse_under(wrapper, stack);
                                     if (!res.success) {
@@ -845,36 +895,20 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                 break;
                             }
                             default: {
-                                // no matter how many match here. we have
-                                // reached our target.
-                                fprintf(stderr, "\n foobar\n");
                                 lex_backtrack_n(wrapper, end_char_count - 2);
-                                res.range.end = lex_current_position(wrapper);
                                 res.success = true;
-                                res.token = STRONG_UNDER;
-                                res.length = wrapper->pos - buffer_start_pos;
-                                // if the next character after the stream
-                                // of underscores is some alphabet, then this
-                                // will invalidate the current token
-                                if (isalpha(next_char)) {
-                                    res.success = false;
+                                dont_parse_next_n(wrapper, stack, 1);
+                                if (end_char_count - 2 > 1) {
+                                    ParseResult attempt = parse_under(wrapper, stack);
+                                    if (!attempt.success) {
+                                        dont_parse_result(&attempt, stack, false);
+                                    }
                                 }
-                                // // if it is greater than 2, force the next remaining positions
-                                // // to not be parsed.
-                                // if (end_char_count > 2) {
-                                //     dont_parse_next_n(wrapper, stack, end_char_count - 2);
-                                // }
-                                // note that the lexer has pushed past  all the stars
-                                // but we are now in a backtracking state.
-                                if (stack_insert(stack, res)==not_found) {
-                                    res.success = false;
-                                }
-                                fprintf(stderr, "returning: ");
-                                print_parse_result(&res);
-                                return res;
-                                break;
                             }
                         }
+                        fprintf(stderr, "returning: ");
+                        print_parse_result(&res);
+                        return res;
                         break;
                     }
                     case 3: {
