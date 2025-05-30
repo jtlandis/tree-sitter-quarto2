@@ -875,7 +875,7 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                         if (res.success) {
                             stack_insert(stack, res);
                         }
-                        fprintf(stderr, "returning: ");
+                        fprintf(stderr, "returning from case 1: ");
                         print_parse_result(&res);
                         return res;
                         break;
@@ -974,6 +974,9 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                 lex_backtrack_n(wrapper, end_char_count - 2);
                                 uint32_t end_pos = wrapper->pos;
                                 res.success = true;
+                                res.range.end = lex_current_position(wrapper);
+
+                                print_pos(&res.range.end);
                                 dont_parse_next_n(wrapper, stack, 1);
                                 if (end_char_count - 2 > 1) {
                                     ParseResult attempt = parse_under(wrapper, stack);
@@ -1006,7 +1009,7 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                 }
                             }
                         }
-                        fprintf(stderr, "returning: ");
+                        fprintf(stderr, "returning from case 2: ");
                         print_parse_result(&res);
                         return res;
                         break;
@@ -1120,8 +1123,7 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                     lookahead = next_char;
                                     continue;
                                 }
-                                print_parse_result(&res);
-                                return res;
+                                break;
                             }
                             default: {
                                 // no matter how many times we detected
@@ -1147,9 +1149,11 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                     res.success = false;
                                 }
                                 dont_parse_next_n(wrapper, stack, 1);
-                                print_parse_result(&res);
-                                return res;
+                                break;
                             }
+                            fprintf(stderr, "returning from 3:");
+                            print_parse_result(&res);
+                            return res;
                             break;
                         }
                         break;
