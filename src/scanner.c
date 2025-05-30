@@ -226,8 +226,8 @@ static enum RangeType classify_range(Range *x, Range *y) {
     if (pos_le(&x->end, &y->start)) {
         return DISJOINT_LESS;
     }
-    if (pos_lt(&x->end, &y->end)) {
-        if (pos_gt(&x->start, &y->start)) {
+    if (pos_le(&x->end, &y->end)) {
+        if (pos_ge(&x->start, &y->start)) {
             return CHILD;
         } else {
             return OVERLAP;
@@ -271,6 +271,13 @@ static size_t stack_insert(ParseResultArray* array, ParseResult element) {
             ParseResult *result = &array->contents[i];
             switch (classify_range(&element.range, &result->range)) {
                 case OVERLAP: {
+                    fprintf(stderr, "OVERLAP found [%i, %i] - [%i, %i] ... [%i, %i] - [%i, %i] ",
+                        element.range.start.row,
+                        element.range.start.col,
+                        element.range.end.row,
+                        element.range.end.col,
+                        result->range.start.row, result->range.start.col,
+                        result->range.end.row, result->range.end.col);
                     out = not_found;
                     goto func_end;
                 }
@@ -297,6 +304,10 @@ static size_t stack_insert(ParseResultArray* array, ParseResult element) {
     }
 
     func_end: {
+        if (out == not_found) {
+            fprintf(stderr, "attempting to insert: ");
+            print_parse_result(&element);
+        }
         fprintf(stderr, "insert was %ssuccessful: \n", out==not_found ? "un" : "");
         print_stack(array);
         return out;
@@ -819,6 +830,19 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                     dont_parse_next_n(wrapper, stack, 1);
                                     break;
                                 }
+
+                                // check if last position was ignored
+                                Pos last_pos = lex_current_position(wrapper);
+                                print_pos(&last_pos);
+                                size_t index = stack_find(stack, &last_pos, DO_NOT_PARSE, true);
+                                print_stack(stack);
+                                if (index < not_found) {
+                                    fprintf(stderr, "index at %zu\n", index);
+                                    array_erase(stack, index);
+                                    last_pos = lex_current_position(wrapper);
+                                    print_pos(&last_pos);
+                                    lex_backtrack_n(wrapper, 1);
+                                }
                                 // if it was successful, there is a chance to
                                 // finish this parse.
                                 last_char = '_';
@@ -882,7 +906,7 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                     }
                     case 2: {
                         // we do not know if it is valid yet...
-
+                        res.token = STRONG_UNDER;
                         switch (end_char_count) {
                             case 1: {
                                 // a single token cannot satisfy this condition
@@ -892,7 +916,6 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                 lex_backtrack_n(wrapper, 1);
                                 uint32_t end_pos = wrapper->pos;
                                 res.range.end = lex_current_position(wrapper);
-                                res.token = STRONG_UNDER;
                                 res.length = end_pos - buffer_start_pos;
 
                                 if (!isalpha(last_char) && isalpha(next_char)) {
@@ -914,7 +937,6 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                     // check if last position was ignored
                                     Pos last_pos = lex_current_position(wrapper);
                                     print_pos(&last_pos);
-                                    fprintf(stderr, "\nfoobar\n");
                                     size_t index = stack_find(stack, &last_pos, DO_NOT_PARSE, true);
                                     print_stack(stack);
                                     if (index < not_found) {
@@ -934,14 +956,13 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                 continue;
                             }
                             case 2:  {
+                                res.length = wrapper->pos - buffer_start_pos;
+                                res.range.end = lex_current_position(wrapper);
                                 // do we need to check that the next character
                                 // is syntax???
                                 if (!isalpha(next_char)) {
                                     // if the next character is NOT alphabet
                                     // then we can complete this case
-                                    res.token = STRONG_UNDER;
-                                    res.length = wrapper->pos - buffer_start_pos;
-                                    res.range.end = lex_current_position(wrapper);
                                     res.success = true;
                                     stack_insert(stack, res);
                                     return res;
@@ -961,8 +982,8 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                     // however if the last character is NOT alphabet
                                     // then it is possible to parse the next _.
                                     lex_backtrack_n(wrapper, 2);
-                                    ParseResult res = parse_under(wrapper, stack);
-                                    if (!res.success) {
+                                    ParseResult attempt = parse_under(wrapper, stack);
+                                    if (!attempt.success) {
                                         wrapper->pos = end_pos - 2;
                                         dont_parse_next_n(wrapper, stack, 2);
                                     }
@@ -975,7 +996,7 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                 uint32_t end_pos = wrapper->pos;
                                 res.success = true;
                                 res.range.end = lex_current_position(wrapper);
-
+                                res.length = end_pos - buffer_start_pos;
                                 print_pos(&res.range.end);
                                 dont_parse_next_n(wrapper, stack, 1);
                                 if (end_char_count - 2 > 1) {
@@ -1007,6 +1028,11 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                         wrapper->pos = end_pos + 1;
                                     }
                                 }
+                            }
+                        }
+                        if (res.success) {
+                            if (stack_insert(stack, res) == not_found) {
+                                res.success = false;
                             }
                         }
                         fprintf(stderr, "returning from case 2: ");
@@ -1151,7 +1177,7 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                 dont_parse_next_n(wrapper, stack, 1);
                                 break;
                             }
-                            fprintf(stderr, "returning from 3:");
+                            fprintf(stderr, "returning from case 3:");
                             print_parse_result(&res);
                             return res;
                             break;
@@ -1459,6 +1485,14 @@ bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, con
           return true;
       }
 
+  } else {
+      // just check if this is something we should skip
+      state->pos.col = lexer->get_column(lexer);
+      size_t index = stack_find(&state->results, &state->pos, DO_NOT_PARSE, false);
+      if (index < not_found) {
+          ParseResult *res = &state->results.contents[index];
+          return false;
+      }
   }
 
   // detect  star
