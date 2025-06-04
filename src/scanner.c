@@ -869,22 +869,12 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                     // which automatically invalidates the current
                                     // scope
                                     // do not modify beginning, leave that for the return_res section
-                                    // ParseResult emph_start = new_parse_result();
-                                    // emph_start.range.start = res.range.start;
-                                    // emph_start.range.end = res.range.start;
-                                    // emph_start.range.end.col++;
-                                    // emph_start.success = true;
-                                    // emph_start.token = DO_NOT_PARSE;
-                                    // emph_start.length = 1;
-                                    // stack_insert(stack, emph_start);
                                     // however if the last character is NOT alphabet
                                     // then it is possible to parse the next _.
                                     lex_backtrack_n(wrapper, 1);
                                     ParseResult attempt = parse_under(wrapper, stack);
                                     if (!attempt.success) {
                                         lex_set_position(wrapper, last_lex_pos);
-                                        // fprintf(stderr, "this is probabily redundant\n");
-                                        // dont_parse_next_n(wrapper, stack, 1);
                                     }
                                 } else {
                                     // special case where we treat it as literal
@@ -915,11 +905,6 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                 fprintf(stderr, "\n");
                                 if (!attempt.success) {
                                     lex_set_position(wrapper, last_lex_pos + 1);
-                                    // dont_parse_next_n(wrapper, stack, 2);
-                                    // last_lex_pos = wrapper->pos;
-                                    // lex_backtrack_n(wrapper, wrapper->pos - end_pos);
-                                    // dont_parse_result(&res, stack, false);
-                                    // dont_parse_next_n(wrapper, stack, 1);
                                     break;
                                 }
 
@@ -959,34 +944,6 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                 print_pos(&pos);
                                 dont_parse_next_n(wrapper, stack, 1);
                                 print_stack(stack);
-                                // no reason to parse this early
-                                // ParseResult attempt = parse_under(wrapper, stack);
-                                // if (!attempt.success) {
-                                //     fprintf(stderr, "failed parsing: ");
-                                //     print_parse_result(&attempt);
-                                //     // we do not know if result ranges are correct...
-                                //     ParseResult start = new_parse_result();
-                                //     start.token = DO_NOT_PARSE;
-                                //     start.range.start = attempt.range.start;
-                                //     start.range.end = attempt.range.start;
-                                //     start.success = true;
-                                //     switch (attempt.token) {
-                                //         case EMPHASIS_UNDER: {
-                                //             start.range.end.col++;
-                                //             start.length = 1;
-                                //         }
-                                //         case STRONG_UNDER: {
-                                //             start.range.end.col += 2;
-                                //             start.length = 2;
-                                //         }
-                                //         default: {}
-                                //     }
-                                //     if (start.length > 0) {
-                                //         stack_insert(stack, start);
-                                //     }
-                                //     // on failure, reset it parser location
-                                //     lex_set_position(wrapper, end_pos + 1);
-                                // }
                                 break;
                             }
                         }
@@ -1012,17 +969,7 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
 
                                     ParseResult attempt = parse_under(wrapper, stack);
                                     if (!attempt.success) {
-                                        // ParseResult strong_start = new_parse_result();
-                                        // strong_start.range.start = attempt.range.start;
-                                        // strong_start.range.end = attempt.range.start;
-                                        // strong_start.range.end.col += 2;
-                                        // strong_start.success = true;
-                                        // strong_start.token = DO_NOT_PARSE;
-                                        // strong_start.length = 2;
-                                        // stack_insert(stack, strong_start);
                                         lex_set_position(wrapper, last_lex_pos + 1);
-                                        // lex_set_position(wrapper, end_pos - 1);
-                                        // dont_parse_next_n(wrapper, stack, 1);
                                         break;
                                     }
                                     // check if last position was ignored
@@ -1061,15 +1008,6 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                     // we know the next character IS alphabet,
                                     // which automatically invalidates the current
                                     // scope
-                                    // uint32_t end_pos = wrapper->pos;
-                                    // ParseResult strong_start = new_parse_result();
-                                    // strong_start.range.start = res.range.start;
-                                    // strong_start.range.end = res.range.start;
-                                    // strong_start.range.end.col += 2;
-                                    // strong_start.success = true;
-                                    // strong_start.token = DO_NOT_PARSE;
-                                    // strong_start.length = 2;
-                                    // stack_insert(stack, strong_start);
                                     // however if the last character is NOT alphabet
                                     // then it is possible to parse the next _.
                                     lex_backtrack_n(wrapper, 2);
@@ -1090,35 +1028,6 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                 res.length = last_lex_pos - buffer_start_pos;
                                 print_pos(&res.range.end);
                                 dont_parse_next_n(wrapper, stack, 1);
-                                // if (end_char_count - 2 > 1) {
-                                //     ParseResult attempt = parse_under(wrapper, stack);
-                                //     if (!attempt.success) {
-                                //         fprintf(stderr, "failed parsing: ");
-                                //         print_parse_result(&attempt);
-                                //         // we do not know if result ranges are correct...
-                                //         ParseResult start = new_parse_result();
-                                //         start.token = DO_NOT_PARSE;
-                                //         start.range.start = attempt.range.start;
-                                //         start.range.end = attempt.range.start;
-                                //         start.success = true;
-                                //         switch (attempt.token) {
-                                //             case EMPHASIS_UNDER: {
-                                //                 start.range.end.col++;
-                                //                 start.length = 1;
-                                //             }
-                                //             case STRONG_UNDER: {
-                                //                 start.range.end.col += 2;
-                                //                 start.length = 2;
-                                //             }
-                                //             default: {}
-                                //         }
-                                //         if (start.length > 0) {
-                                //             stack_insert(stack, start);
-                                //         }
-                                //         // on failure, reset it parser location
-                                //         lex_set_position(wrapper, end_pos + 1);
-                                //     }
-                                // }
                             }
                         }
                         fprintf(stderr, "returning from case 2: ");
@@ -1132,7 +1041,6 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                 // if the next character is not an alphabet
                                 // then we know that the inner set is an
                                 // emphasis.
-                                // res.token = STRONG_UNDER;
                                 if (!isalpha(next_char)) {
                                     ParseResult inner = new_parse_result();
                                     inner.range.end = wrapper->curr_pos;
