@@ -765,6 +765,8 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
                     if (!attempt.success) {
                         return res;
                     }
+                    lookahead = lex_lookahead(wrapper);
+                    continue;
                 }
             }
                 break;
@@ -796,6 +798,17 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
     while (lex_lookahead(wrapper) == '_') {
         lex_advance(wrapper, false);
         char_count++;
+    }
+    switch (char_count) {
+        case 1: {
+            res.token = EMPHASIS_UNDER;
+            break;
+        }
+        case 2: {
+            res.token = STRONG_UNDER;
+            break;
+        }
+        default: {}
     }
     if (char_count > 3) {
         // as a special feature, we insert this into
@@ -1284,6 +1297,8 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                     // should probabbly decide how to handle inline parse failures
                     // maybe they should just be considered literal for this purpose
                     // or maybe just ignored for later?
+                    lookahead = lex_lookahead(wrapper);
+                    continue;
                 }
                 break;
             }
@@ -1294,6 +1309,7 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
         lookahead = lex_lookahead(wrapper);
     }
     fprintf(stderr, "reached end of file\n");
+    goto return_res;
     return_res: {
 
         if (res.success) {
@@ -1325,8 +1341,7 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
             }
         }
         fprintf(stderr, "parser is at position: ");
-        Pos pos = wrapper->curr_pos;
-        print_pos(&pos);
+        debug_pos(&wrapper->curr_pos);
         fprintf(stderr, "\n");
         return res;
     }
@@ -1531,15 +1546,21 @@ static void parse_new_line(ScannerState *state, TSLexer *lexer) {
                 break;
             }
             default: {
+
                 if (is_inline_synatx(lookahead)) {
-                    parse_inline(&wrapper, &state->results);
+                    fprintf(stderr, "about to parse inline: ");
+                    debug_pos(&wrapper.curr_pos);
+                    fprintf(stderr, "\n");
+                    ParseResult attempt = parse_inline(&wrapper, &state->results);
+                    if (attempt.success) {
+                        lex_backtrack_n(&wrapper, 1);
+                    }
                 }
             }
         }
-
         lex_advance(&wrapper, false);
         pos = wrapper.curr_pos;
-        size_t index = stack_find(&state->results, &pos, DO_NOT_PARSE, true);
+        size_t index = stack_find(&state->results, &pos, DO_NOT_PARSE, false);
         if (index < not_found) {
             ParseResult *no_parse = &state->results.contents[index];
             for (uint32_t i = 0; i < no_parse->length; i++) {
