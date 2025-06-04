@@ -563,6 +563,17 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
         lex_advance(wrapper, false);
         char_count++;
     }
+    switch (char_count) {
+        case 1: {
+            res.token = EMPHASIS_STAR;
+            break;
+        }
+        case 2: {
+            res.token = STRONG_STAR;
+            break;
+        }
+        default: {}
+    }
     if (char_count > 3) {
         // as a special feature, we insert this into
         // the stack to signal that it should not match
@@ -572,7 +583,7 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
         res.range.end = wrapper->curr_pos;
         res.length = char_count;
         res.token = DO_NOT_PARSE;
-        wrapper->lexer->mark_end(wrapper->lexer);
+        // wrapper->lexer->mark_end(wrapper->lexer);
         fprintf(stderr, "returning a NO_PARSE result:");
         print_parse_result(&res);
         fprintf(stderr, "\n");
@@ -585,6 +596,7 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
         // emphasis or strong.
         return res;
     }
+    uint32_t last_lex_pos = 0;
     uint8_t end_char_count = 0;
     uint8_t new_line_count = 0;
     while(lookahead != '\0' && char_count > 0) {
@@ -601,60 +613,48 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
                         // we only have one left to match...
                         // no matter the size of end_char_count
                         lex_backtrack_n(wrapper, end_char_count - 1);
-                        uint32_t end_pos = wrapper->pos;
+                        last_lex_pos = wrapper->pos;
                         res.range.end = wrapper->curr_pos;
-                        res.success = true;
                         res.token = EMPHASIS_STAR;
-                        res.length = wrapper->pos - buffer_start_pos;
-                        // note that the lexer has pushed past  all the stars
-                        // but we are now in a backtracking state.
-                        if (end_char_count > 1) {
-                            // if we parse further and find the end result
-                            // is EMPHASIS_STAR, invalidate
-                            ParseResult attempt = parse_star(wrapper, stack);
-                            if (attempt.success && attempt.token == EMPHASIS_STAR) {
-                                dont_parse_result(&attempt, stack, true);
-                                ParseResult emph_end = new_parse_result();
-                                emph_end.token = DO_NOT_PARSE;
-                                emph_end.range.start = res.range.end;
-                                emph_end.range.end = emph_end.range.start;
-                                emph_end.range.start.col--;
-                                emph_end.length = 1;
-                                stack_insert(stack, emph_end);
-                                res.token = DO_NOT_PARSE;
-                                res.range.end = res.range.start;
-                                res.range.end.col++;
+
+                        switch (end_char_count) {
+                            case 2: {
+                                lex_backtrack_n(wrapper, 1);
+                                ParseResult attempt = parse_star(wrapper, stack);
+                                if (attempt.success) {
+                                    lookahead = lex_lookahead(wrapper);
+                                    continue;
+                                } else {
+                                    lex_set_position(wrapper, last_lex_pos - 1);
+                                    dont_parse_next_n(wrapper, stack, 2);
+                                }
+                                break;
+                            }
+                            default: {
+                                res.length = last_lex_pos - buffer_start_pos;
                                 res.success = true;
-                            } else {
-                                lex_backtrack_n(wrapper, wrapper->pos - end_pos);
+                                break;
                             }
                         }
-                        if (stack_insert(stack, res) == not_found) {
-                            res.success = false;
-                        }
-                        fprintf(stderr, "returning: ");
-                        print_parse_result(&res);
-                        return res;
+
+                        goto return_res;
                         break;
                     }
                     case 2: {
+                        last_lex_pos = wrapper->pos;
+                        res.token = STRONG_STAR;
                         switch (end_char_count) {
                             case 1: {
-                                // this may invalidate our current  scope
                                 lex_backtrack_n(wrapper, 1);
                                 ParseResult attempt = parse_star(wrapper, stack);
-                                // if it wasn't successful, then this token will
-                                // also not be successful
-                                if (!attempt.success) {
-                                    fprintf(stderr, "returning failure: ");
-                                    print_parse_result(&res);
-                                    return res;
+                                if (attempt.success) {
+                                    lookahead = lex_lookahead(wrapper);
+                                    continue;
+                                } else {
+                                    lex_set_position(wrapper, last_lex_pos - 1);
+                                    dont_parse_next_n(wrapper, stack, 1);
                                 }
-                                fprintf(stderr, "successful internal parse... lexer at: ");
-                                Pos _pos = wrapper->curr_pos;
-                                print_pos(&_pos);
-                                lookahead = lex_lookahead(wrapper);
-                                continue;
+                                break;
                             }
                             default: {
                                 // no matter how many match here. we have
@@ -662,19 +662,11 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
                                 lex_backtrack_n(wrapper, end_char_count - 2);
                                 res.range.end = wrapper->curr_pos;
                                 res.success = true;
-                                res.token = STRONG_STAR;
                                 res.length = wrapper->pos - buffer_start_pos;
-                                // note that the lexer has pushed past  all the stars
-                                // but we are now in a backtracking state.
-                                if (stack_insert(stack, res) == not_found) {
-                                    res.success = false;
-                                }
-                                fprintf(stderr, "returning: ");
-                                print_parse_result(&res);
-                                return res;
                                 break;
                             }
                         }
+                        goto return_res;
                         break;
                     }
                     case 3: {
@@ -693,7 +685,8 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
                                 if (stack_insert(stack, inner) < not_found) {
                                     char_count--;
                                 }
-                                break;
+                                lookahead = lex_lookahead(wrapper);
+                                continue;
                             }
                             case 2: {
                                 // inner syntax is an strong and outer is
@@ -709,7 +702,8 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
                                 if (stack_insert(stack, inner) < not_found) {
                                     char_count -= 2;
                                 }
-                                break;
+                                lookahead = lex_lookahead(wrapper);
+                                continue;
                             }
                             default: {
                                 // no matter how many times we detected
@@ -730,15 +724,13 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
                                 inner.token = EMPHASIS_STAR;
                                 inner.length = wrapper->pos - buffer_start_pos - 2;
                                 size_t index = stack_insert(stack, inner);
-                                if (index < not_found) {
-                                    array_insert(stack, index, res);
-                                } else {
+                                if (index == not_found) {
                                     res.success = false;
                                 }
-                                return res;
+                                break;
                             }
-                            break;
                         }
+                        goto return_res;
                         break;
                     }
                 }
@@ -775,7 +767,42 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
         lookahead = lex_lookahead(wrapper);
     }
 
-    return res;
+    goto return_res;
+    return_res: {
+
+        if (res.success) {
+            stack_insert(stack, res);
+        } else {
+            fprintf(stderr, "failed parsing: ");
+            print_parse_result(&res);
+            // we do not know if result ranges are correct...
+            ParseResult start = new_parse_result();
+            start.token = DO_NOT_PARSE;
+            start.range.start = res.range.start;
+            start.range.end = res.range.start;
+            start.success = true;
+            switch (res.token) {
+                case EMPHASIS_STAR: {
+                    start.range.end.col++;
+                    start.length = 1;
+                    break;
+                }
+                case STRONG_STAR: {
+                    start.range.end.col += 2;
+                    start.length = 2;
+                    break;
+                }
+                default: {}
+            }
+            if (start.length > 0) {
+                stack_insert(stack, start);
+            }
+        }
+        fprintf(stderr, "parser is at position: ");
+        debug_pos(&wrapper->curr_pos);
+        fprintf(stderr, "\n");
+        return res;
+    }
 
 }
 
@@ -818,7 +845,7 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
         res.success = true;
         res.range.end = wrapper->curr_pos;
         res.length = char_count;
-        wrapper->lexer->mark_end(wrapper->lexer);
+        // wrapper->lexer->mark_end(wrapper->lexer);
         fprintf(stderr, "returning a NONE result:");
         print_parse_result(&res);
         fprintf(stderr, "\n");

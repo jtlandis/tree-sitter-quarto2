@@ -8,6 +8,10 @@
       "required": true,
       "types": [
         {
+          "type": "line_end",
+          "named": true
+        },
+        {
           "type": "paragraph",
           "named": true
         }
@@ -558,11 +562,6 @@
     }
   },
   {
-    "type": "symbols",
-    "named": true,
-    "fields": {}
-  },
-  {
     "type": "  ",
     "named": false
   },
@@ -649,6 +648,10 @@
   },
   {
     "type": "strong_start",
+    "named": true
+  },
+  {
+    "type": "symbols",
     "named": true
   },
   {
