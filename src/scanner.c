@@ -80,9 +80,9 @@ typedef struct LexWrap {
 
 static void print_letter(int32_t letter) {
     if (letter == '\n') {
-        fprintf(stderr, "'\\n'");
+        // fprintf(stderr, "'\\n'");
     } else {
-        fprintf(stderr, "'%c'", letter);
+        // fprintf(stderr, "'%c'", letter);
     }
 }
 
@@ -112,7 +112,7 @@ static void lex_advance(LexWrap* wrapper, bool skip) {
     int32_t lookahead = lex_lookahead(wrapper);
     if (wrapper->pos == wrapper->buffer.size) {
         if (lookahead == '\n') {
-            fprintf(stderr, "found new line, documenting position at %i\n", wrapper->pos + 1);
+            // fprintf(stderr, "found new line, documenting position at %i\n", wrapper->pos + 1);
             array_push(&wrapper->new_line_loc, wrapper->pos + 1);
         }
         array_push(&wrapper->buffer, lookahead);
@@ -130,13 +130,13 @@ static void lex_advance(LexWrap* wrapper, bool skip) {
     }
     wrapper->pos++;
 
-    fprintf(stderr, " * consuming: ");
+    // fprintf(stderr, " * consuming: ");
     print_letter(lookahead);
-    fprintf(stderr, "\n");
+    // fprintf(stderr, "\n");
 }
 
 static void lex_backtrack_n(LexWrap* wrapper, uint32_t n) {
-    fprintf(stderr, "n: %i -- wrapper->pos: %i\n", n, wrapper->pos);
+    // fprintf(stderr, "n: %i -- wrapper->pos: %i\n", n, wrapper->pos);
     assert(n <= wrapper->pos);
     int32_t *letter;
     for(uint32_t i = 0; i < n; i++) {
@@ -200,16 +200,16 @@ static bool pos_ge(Pos *x, Pos *y) {
 }
 
 static void print_pos(const Pos *pos) {
-    fprintf(stderr, "Pos { row: %u, col: %u }", pos->row, pos->col);
+    // fprintf(stderr, "Pos { row: %u, col: %u }", pos->row, pos->col);
 }
 
 static void debug_pos(const Pos *pos) {
-    fprintf(stderr, "[%u, %u]", pos->row, pos->col);
+    // fprintf(stderr, "[%u, %u]", pos->row, pos->col);
 }
 
 static Pos lex_current_position(LexWrap *wrapper) {
     Pos range = new_position(wrapper->init_pos.row, wrapper->init_pos.col + wrapper->pos);
-    fprintf(stderr, "current position: ");
+    // fprintf(stderr, "current position: ");
     debug_pos(&range);
     if (wrapper->new_line_loc.size > 0) {
         uint32_t diff;
@@ -226,10 +226,10 @@ static Pos lex_current_position(LexWrap *wrapper) {
             diff = line_index - last_index;
             last_index = line_index;
             range.col -= diff;
-            fprintf(stderr, " ");
+            // fprintf(stderr, " ");
             debug_pos(&range);
         }
-        fprintf(stderr, "\n");
+        // fprintf(stderr, "\n");
     }
     return range;
 }
@@ -304,15 +304,15 @@ static enum RangeType classify_range(Range *x, Range *y) {
 }
 
 static void print_parse_result(const ParseResult *res) {
-    fprintf(stderr, "ParseResult { success: %d, length: %u, range: ", res->success, res->length);
-    fprintf(stderr, "[%i, %i] - ", res->range.start.row, res->range.start.col);
-    fprintf(stderr, "[%i, %i]", res->range.end.row, res->range.end.col);
-    fprintf(stderr, ", token: %d }\n", res->token);
+    // fprintf(stderr, "ParseResult { success: %d, length: %u, range: ", res->success, res->length);
+    // fprintf(stderr, "[%i, %i] - ", res->range.start.row, res->range.start.col);
+    // fprintf(stderr, "[%i, %i]", res->range.end.row, res->range.end.col);
+    // fprintf(stderr, ", token: %d }\n", res->token);
 }
 
 static void print_stack(ParseResultArray *stack) {
     for (uint32_t i = 0; i < stack->size; i++) {
-        fprintf(stderr, "\t");
+        // fprintf(stderr, "\t");
         print_parse_result(&stack->contents[i]);
     }
 }
@@ -328,7 +328,7 @@ static size_t stack_insert(ParseResultArray* array, ParseResult element) {
             ParseResult *result = &array->contents[i];
             switch (classify_range(&element.range, &result->range)) {
                 case OVERLAP: {
-                    fprintf(stderr, "OVERLAP found [%i, %i] - [%i, %i] ... [%i, %i] - [%i, %i] ",
+                    // fprintf(stderr, "OVERLAP found [%i, %i] - [%i, %i] ... [%i, %i] - [%i, %i] ",
                         element.range.start.row,
                         element.range.start.col,
                         element.range.end.row,
@@ -362,10 +362,10 @@ static size_t stack_insert(ParseResultArray* array, ParseResult element) {
 
     func_end: {
         if (out == not_found) {
-            fprintf(stderr, "attempting to insert: ");
+            // fprintf(stderr, "attempting to insert: ");
             print_parse_result(&element);
         }
-        fprintf(stderr, "insert was %ssuccessful: \n", out==not_found ? "un" : "");
+        // fprintf(stderr, "insert was %ssuccessful: \n", out==not_found ? "un" : "");
         print_stack(array);
         return out;
     }
@@ -441,7 +441,7 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack);
 static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack);
 
 static ParseResult parse_inline(LexWrap *wrapper, ParseResultArray* stack) {
-    fprintf(stderr, "calling parse_inline()\n");
+    // fprintf(stderr, "calling parse_inline()\n");
     uint32_t stack_start_size = stack->size;
     uint32_t buffer_start_pos = wrapper->pos;
     ParseResult res = new_parse_result();
@@ -465,7 +465,7 @@ static ParseResult parse_inline(LexWrap *wrapper, ParseResultArray* stack) {
         res.token = DO_NOT_PARSE;
         res.length = wrapper->pos - buffer_start_pos;
     }
-    fprintf(stderr, "inline parse results: ");
+    // fprintf(stderr, "inline parse results: ");
     print_parse_result(&res);
     return res;
 }
@@ -545,7 +545,7 @@ static void dont_parse_next_n(LexWrap *wrapper, ParseResultArray *stack, uint32_
 }
 
 static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
-    fprintf(stderr, "calling - parse_star()\n");
+    // fprintf(stderr, "calling - parse_star()\n");
     uint32_t stack_start_size = stack->size;
     uint32_t buffer_start_pos = wrapper->pos;
     ParseResult res = new_parse_result();
@@ -584,9 +584,9 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
         res.length = char_count;
         res.token = DO_NOT_PARSE;
         // wrapper->lexer->mark_end(wrapper->lexer);
-        fprintf(stderr, "returning a NO_PARSE result:");
+        // fprintf(stderr, "returning a NO_PARSE result:");
         print_parse_result(&res);
-        fprintf(stderr, "\n");
+        // fprintf(stderr, "\n");
         stack_insert(stack, res);
         return res;
     }
@@ -773,7 +773,7 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
         if (res.success) {
             stack_insert(stack, res);
         } else {
-            fprintf(stderr, "failed parsing: ");
+            // fprintf(stderr, "failed parsing: ");
             print_parse_result(&res);
             // we do not know if result ranges are correct...
             ParseResult start = new_parse_result();
@@ -798,16 +798,16 @@ static ParseResult parse_star(LexWrap *wrapper, ParseResultArray* stack) {
                 stack_insert(stack, start);
             }
         }
-        fprintf(stderr, "parser is at position: ");
+        // fprintf(stderr, "parser is at position: ");
         debug_pos(&wrapper->curr_pos);
-        fprintf(stderr, "\n");
+        // fprintf(stderr, "\n");
         return res;
     }
 
 }
 
 static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
-    fprintf(stderr, "calling - parse_under()\n");
+    // fprintf(stderr, "calling - parse_under()\n");
     uint32_t stack_start_size = stack->size;
     uint32_t buffer_start_pos = wrapper->pos;
     uint32_t last_lex_pos = wrapper->pos;
@@ -846,9 +846,9 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
         res.range.end = wrapper->curr_pos;
         res.length = char_count;
         // wrapper->lexer->mark_end(wrapper->lexer);
-        fprintf(stderr, "returning a NONE result:");
+        // fprintf(stderr, "returning a NONE result:");
         print_parse_result(&res);
-        fprintf(stderr, "\n");
+        // fprintf(stderr, "\n");
         stack_insert(stack, res);
         return res;
     }
@@ -862,7 +862,7 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
     uint8_t end_char_count = 0;
     uint8_t new_line_count = 0;
     while(lookahead != '\0' && char_count > 0) {
-        fprintf(stderr, "lookahead - %c\n", lookahead);
+        // fprintf(stderr, "lookahead - %c\n", lookahead);
         switch (lookahead) {
             case '_': {
                 // see how many we can consume
@@ -920,16 +920,16 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                 // token, it takes precendence
                                 lex_backtrack_n(wrapper, 1);
                                 Pos pos = wrapper->curr_pos;
-                                fprintf(stderr, "about to call parse_under: ");
+                                // fprintf(stderr, "about to call parse_under: ");
                                 debug_pos(&pos);
-                                fprintf(stderr, "\n");
+                                // fprintf(stderr, "\n");
                                 ParseResult attempt = parse_under(wrapper, stack);
-                                fprintf(stderr, "returned with: ");
+                                // fprintf(stderr, "returned with: ");
                                 print_parse_result(&attempt);
-                                fprintf(stderr, " and at position: ");
+                                // fprintf(stderr, " and at position: ");
                                 pos = wrapper->curr_pos;
                                 debug_pos(&pos);
-                                fprintf(stderr, "\n");
+                                // fprintf(stderr, "\n");
                                 if (!attempt.success) {
                                     lex_set_position(wrapper, last_lex_pos + 1);
                                     break;
@@ -942,7 +942,7 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                 size_t index = stack_find(stack, &last_pos, DO_NOT_PARSE, true);
                                 print_stack(stack);
                                 if (index < not_found) {
-                                    fprintf(stderr, "index at %zu\n", index);
+                                    // fprintf(stderr, "index at %zu\n", index);
                                     array_erase(stack, index);
                                     last_pos = wrapper->curr_pos;
                                     print_pos(&last_pos);
@@ -974,7 +974,7 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                 break;
                             }
                         }
-                        fprintf(stderr, "returning from case 1: ");
+                        // fprintf(stderr, "returning from case 1: ");
                         goto return_res;
                         break;
                     }
@@ -1005,7 +1005,7 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                     size_t index = stack_find(stack, &last_pos, DO_NOT_PARSE, true);
                                     print_stack(stack);
                                     if (index < not_found) {
-                                        fprintf(stderr, "index at %zu\n", index);
+                                        // fprintf(stderr, "index at %zu\n", index);
                                         array_erase(stack, index);
                                         last_pos = wrapper->curr_pos;
                                         print_pos(&last_pos);
@@ -1057,7 +1057,7 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                 dont_parse_next_n(wrapper, stack, 1);
                             }
                         }
-                        fprintf(stderr, "returning from case 2: ");
+                        // fprintf(stderr, "returning from case 2: ");
                         goto return_res;
                         break;
                     }
@@ -1203,7 +1203,7 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                                 break;
                             }
                         }
-                        fprintf(stderr, "returning from case 3:");
+                        // fprintf(stderr, "returning from case 3:");
                         goto return_res;
                         break;
                     }
@@ -1213,7 +1213,7 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
             case '\n': {
                 new_line_count++;
                 if (new_line_count > 1) {
-                    fprintf(stderr, "found too many '\\n' characters. returning...\n");
+                    // fprintf(stderr, "found too many '\\n' characters. returning...\n");
                     goto return_res;
                 }
                 break;
@@ -1238,19 +1238,19 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                 break;
             }
         }
-        fprintf(stderr, "made it to the end of the loop - last_char %c, lookahead %c \n", last_char, lookahead);
+        // fprintf(stderr, "made it to the end of the loop - last_char %c, lookahead %c \n", last_char, lookahead);
         last_char = lookahead;
         lex_advance(wrapper, false);
         lookahead = lex_lookahead(wrapper);
     }
-    fprintf(stderr, "reached end of file\n");
+    // fprintf(stderr, "reached end of file\n");
     goto return_res;
     return_res: {
 
         if (res.success) {
             stack_insert(stack, res);
         } else {
-            fprintf(stderr, "failed parsing: ");
+            // fprintf(stderr, "failed parsing: ");
             print_parse_result(&res);
             // we do not know if result ranges are correct...
             ParseResult start = new_parse_result();
@@ -1275,9 +1275,9 @@ static ParseResult parse_under(LexWrap *wrapper, ParseResultArray* stack) {
                 stack_insert(stack, start);
             }
         }
-        fprintf(stderr, "parser is at position: ");
+        // fprintf(stderr, "parser is at position: ");
         debug_pos(&wrapper->curr_pos);
-        fprintf(stderr, "\n");
+        // fprintf(stderr, "\n");
         return res;
     }
 
@@ -1292,48 +1292,48 @@ typedef struct {
 } ScannerState;
 
 static void print_scanner_state(const ScannerState *state) {
-    fprintf(stderr, "ScannerState {\n  pos: ");
+    // fprintf(stderr, "ScannerState {\n  pos: ");
     print_pos(&state->pos);
-    fprintf(stderr, "\n  results (size: %u):\n", state->results.size);
+    // fprintf(stderr, "\n  results (size: %u):\n", state->results.size);
     for (uint32_t i = 0; i < state->results.size; i++) {
-        fprintf(stderr, "\t");
+        // fprintf(stderr, "\t");
         print_parse_result(&state->results.contents[i]);
     }
-    fprintf(stderr, "}\n");
+    // fprintf(stderr, "}\n");
 }
 
 static void print_lexwrap(const LexWrap *wrap) {
-    fprintf(stderr, "LexWrap {\n  init_pos: [%u, %u]\n  pos: %u\n", wrap->init_pos.row,
+    // fprintf(stderr, "LexWrap {\n  init_pos: [%u, %u]\n  pos: %u\n", wrap->init_pos.row,
         wrap->init_pos.col, wrap->pos);
-    fprintf(stderr, "  buffer (size: %u)\n", wrap->buffer.size);
-    fprintf(stderr, " new_line_loc (size: %u): [", wrap->new_line_loc.size);
+    // fprintf(stderr, "  buffer (size: %u)\n", wrap->buffer.size);
+    // fprintf(stderr, " new_line_loc (size: %u): [", wrap->new_line_loc.size);
     for (uint32_t i = 0; i < wrap->new_line_loc.size; i++) {
-        fprintf(stderr, "%u", wrap->new_line_loc.contents[i]);
-        if (i + 1 < wrap->new_line_loc.size) fprintf(stderr, ", ");
+        // fprintf(stderr, "%u", wrap->new_line_loc.contents[i]);
+        // if (i + 1 < wrap->new_line_loc.size) fprintf(stderr, ", ");
     }
-    fprintf(stderr, "]\n}\n");
+    // fprintf(stderr, "]\n}\n");
 }
 
 
 void *tree_sitter_quarto_external_scanner_create() {
-  // fprintf(stderr, "attempting to create scanner... ");
+  fprintf(stderr, "attempting to create scanner... ");
   ScannerState *state = (ScannerState *)malloc(sizeof(ScannerState));
   state->pos = new_position(0, 0);
   array_init(&state->results); // Initialize the state
-  // fprintf(stderr, "returning scanner\n");
+  fprintf(stderr, "returning scanner\n");
   return state;
 }
 
 void tree_sitter_quarto_external_scanner_destroy(void *payload) {
-  // fprintf(stderr, "attempting to destroy scanner... ");
+  fprintf(stderr, "attempting to destroy scanner... ");
   ScannerState *state = (ScannerState *)payload;
   array_delete(&state->results); // Free the heap memory used by the array
   free(payload); // Free the allocated state
-  // fprintf(stderr, "freeing memory and exiting\n");
+  fprintf(stderr, "freeing memory and exiting\n");
 }
 
 unsigned tree_sitter_quarto_external_scanner_serialize(void *payload, char *buffer) {
-  // fprintf(stderr, "attempting to serialize scanner... ");
+  fprintf(stderr, "attempting to serialize scanner... ");
   ScannerState *state = (ScannerState *)payload;
   size_t offset = 0;
   // get the position
@@ -1351,48 +1351,48 @@ unsigned tree_sitter_quarto_external_scanner_serialize(void *payload, char *buff
       memcpy(buffer + offset, res, sizeof(ParseResult));
       offset += sizeof(ParseResult);
   }
-  // fprintf(stderr, "%zu bytes written... \n", offset);
+  fprintf(stderr, "%zu bytes written... \n", offset);
   return offset;
 }
 
 void tree_sitter_quarto_external_scanner_deserialize(void *payload, const char *buffer, unsigned length) {
-    // fprintf(stderr, "attempting to deserialize scanner... \n");
+    fprintf(stderr, "attempting to deserialize scanner... \n");
     if (!payload || !buffer) {
-        // fprintf(stderr, "Null pointer in deserialize!\n");
+        fprintf(stderr, "Null pointer in deserialize!\n");
         return;
     }
     if (length < sizeof(uint32_t)) {
-        // fprintf(stderr, "Buffer too small in deserialize!\n");
+        fprintf(stderr, "Buffer too small in deserialize!\n");
         return;
     }
     ScannerState *state = (ScannerState *)payload;
     size_t offset = 0;
 
-    // fprintf(stderr, "writing row bits... ");
+    fprintf(stderr, "writing row bits... ");
     memcpy(&state->pos.row, buffer + offset, sizeof(uint32_t));
     offset += sizeof(uint32_t);
-    // fprintf(stderr, "writing col bits... ");
+    fprintf(stderr, "writing col bits... ");
     memcpy(&state->pos.col, buffer + offset, sizeof(uint32_t));
     offset += sizeof(uint32_t);
 
-    // fprintf(stderr, "writing array size bits... ");
+    fprintf(stderr, "writing array size bits... ");
     // Deserialize results array size
     uint32_t arr_size = 0;
     memcpy(&arr_size, buffer + offset, sizeof(uint32_t));
     offset += sizeof(uint32_t);
 
-    // fprintf(stderr, "reserving array size... ");
+    fprintf(stderr, "reserving array size... ");
     array_clear(&state->results);
     array_reserve(&state->results, arr_size);
     state->results.size = arr_size;
 
-    // fprintf(stderr, "attempting to pull buffer info of %i elements... ", arr_size);
+    fprintf(stderr, "attempting to pull buffer info of %i elements... ", arr_size);
     // Deserialize each ParseResult
     for (uint32_t i = 0; i < arr_size; i++) {
       memcpy(&state->results.contents[i], buffer + offset, sizeof(ParseResult));
       offset += sizeof(ParseResult);
     }
-    // fprintf(stderr, "exiting from deserializing function... \n");
+    fprintf(stderr, "exiting from deserializing function... \n");
 }
 
 
@@ -1406,20 +1406,20 @@ static int32_t other_emphasis(int32_t char_) {
 }
 
 static void print_valid_symbols(const bool *valid_symbols) {
-    fprintf(stderr, "valid_symbols: [");
-    fprintf(stderr, "LINE_START=%d, ", valid_symbols[LINE_START]);
-    fprintf(stderr, "LINE_END=%d, ", valid_symbols[LINE_END]);
-    fprintf(stderr, "EMPHASIS_STAR_START=%d, ", valid_symbols[EMPHASIS_STAR_START]);
-    fprintf(stderr, "EMPHASIS_STAR_END=%d, ", valid_symbols[EMPHASIS_STAR_END]);
-    fprintf(stderr, "EMPHASIS_UNDER_START=%d, ", valid_symbols[EMPHASIS_UNDER_START]);
-    fprintf(stderr, "EMPHASIS_UNDER_END=%d, ", valid_symbols[EMPHASIS_UNDER_END]);
-    fprintf(stderr, "STRONG_STAR_START=%d, ", valid_symbols[STRONG_STAR_START]);
-    fprintf(stderr, "STRONG_STAR_END=%d, ", valid_symbols[STRONG_STAR_END]);
-    fprintf(stderr, "STRONG_UNDER_START=%d, ", valid_symbols[STRONG_UNDER_START]);
-    fprintf(stderr, "STRONG_UNDER_END=%d, ", valid_symbols[STRONG_UNDER_END]);
-    fprintf(stderr, "NO_PARSE=%d, ", valid_symbols[NO_PARSE]);
-    fprintf(stderr, "ERROR=%d", valid_symbols[ERROR]);
-    fprintf(stderr, "]\n");
+    // fprintf(stderr, "valid_symbols: [");
+    // fprintf(stderr, "LINE_START=%d, ", valid_symbols[LINE_START]);
+    // fprintf(stderr, "LINE_END=%d, ", valid_symbols[LINE_END]);
+    // fprintf(stderr, "EMPHASIS_STAR_START=%d, ", valid_symbols[EMPHASIS_STAR_START]);
+    // fprintf(stderr, "EMPHASIS_STAR_END=%d, ", valid_symbols[EMPHASIS_STAR_END]);
+    // fprintf(stderr, "EMPHASIS_UNDER_START=%d, ", valid_symbols[EMPHASIS_UNDER_START]);
+    // fprintf(stderr, "EMPHASIS_UNDER_END=%d, ", valid_symbols[EMPHASIS_UNDER_END]);
+    // fprintf(stderr, "STRONG_STAR_START=%d, ", valid_symbols[STRONG_STAR_START]);
+    // fprintf(stderr, "STRONG_STAR_END=%d, ", valid_symbols[STRONG_STAR_END]);
+    // fprintf(stderr, "STRONG_UNDER_START=%d, ", valid_symbols[STRONG_UNDER_START]);
+    // fprintf(stderr, "STRONG_UNDER_END=%d, ", valid_symbols[STRONG_UNDER_END]);
+    // fprintf(stderr, "NO_PARSE=%d, ", valid_symbols[NO_PARSE]);
+    // fprintf(stderr, "ERROR=%d", valid_symbols[ERROR]);
+    // fprintf(stderr, "]\n");
 }
 
 /// called after a new line is detected and the next symbol is not a new_line
@@ -1430,7 +1430,7 @@ static void print_valid_symbols(const bool *valid_symbols) {
 /// if some internal parse occurs in which we pass a new line, that is fine
 ///
 static void parse_new_line(ScannerState *state, TSLexer *lexer) {
-    fprintf(stderr, "- calling: parse_new_line()\n");
+    // fprintf(stderr, "- calling: parse_new_line()\n");
     // the position of the state should ALWAYS be correct when this
     // function is called.
     LexWrap wrapper = new_lexer(lexer, state->pos);
@@ -1470,7 +1470,7 @@ static void parse_new_line(ScannerState *state, TSLexer *lexer) {
     while(lookahead != '\0') {
         switch (lookahead) {
             case '\n': {
-                fprintf(stderr, "new-line is next... ending parse_new_line()\n");
+                // fprintf(stderr, "new-line is next... ending parse_new_line()\n");
                 return;
             }
             case '\\': {
@@ -1483,9 +1483,9 @@ static void parse_new_line(ScannerState *state, TSLexer *lexer) {
             default: {
 
                 if (is_inline_synatx(lookahead)) {
-                    fprintf(stderr, "about to parse inline: ");
+                    // fprintf(stderr, "about to parse inline: ");
                     debug_pos(&wrapper.curr_pos);
-                    fprintf(stderr, "\n");
+                    // fprintf(stderr, "\n");
                     ParseResult attempt = parse_inline(&wrapper, &state->results);
                     if (attempt.success) {
                         lex_backtrack_n(&wrapper, 1);
@@ -1515,11 +1515,11 @@ bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, con
 
   ScannerState *state = (ScannerState *)payload;
   print_scanner_state(state);
-  fprintf(stderr, "scanner invoked before: %c - is alpha: %i\n",
+  // fprintf(stderr, "scanner invoked before: %c - is alpha: %i\n",
       lexer->lookahead, isalnum((int)lexer->lookahead));
   print_valid_symbols(valid_symbols);
   if (valid_symbols[ERROR]) {
-      fprintf(stderr, "ERROR is a valid symbol. do not handle\n");
+      // fprintf(stderr, "ERROR is a valid symbol. do not handle\n");
       // lexer->mark_end(lexer);
       // lexer->result_symbol = ERROR;
       return false;
@@ -1528,7 +1528,7 @@ bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, con
 
   if (valid_symbols[LINE_START] && state->pos.col == 0 &&
       lexer->lookahead != '\n' && lexer->lookahead != '\0') {
-      fprintf(stderr, "possible line start\n");
+      // fprintf(stderr, "possible line start\n");
       lexer->mark_end(lexer);
       lexer->result_symbol = LINE_START;
       parse_new_line(state, lexer);
@@ -1542,7 +1542,7 @@ bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, con
     lexer->advance(lexer, true);
   }
 
-  // fprintf(stderr, "scanner invoked... next char %c\n", lexer->lookahead);
+  fprintf(stderr, "scanner invoked... next char %c\n", lexer->lookahead);
   // Detect a newline
   if (lexer->lookahead == '\n' && valid_symbols[LINE_END]) {
     state->pos.row++;
@@ -1588,7 +1588,7 @@ bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, con
       valid_symbols[EMPHASIS_STAR_END] ||
       valid_symbols[STRONG_STAR_END]
   )) {
-      fprintf(stderr, "looking for strong or emph star\n");
+      // fprintf(stderr, "looking for strong or emph star\n");
       // get current start position
       state->pos.col = lexer->get_column(lexer);
       LexWrap wrapper = new_lexer(lexer, state->pos);
@@ -1600,9 +1600,9 @@ bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, con
       // enable STRONG_STAR_END and EMPH_STAR_END
       // at the same time...
       Pos possible_pos = wrapper.curr_pos;
-      fprintf(stderr, "lex is at: ");
+      // fprintf(stderr, "lex is at: ");
       print_pos(&possible_pos);
-      fprintf(stderr, "\n");
+      // fprintf(stderr, "\n");
       if (valid_symbols[EMPHASIS_STAR_END]) {
           size_t index = stack_find(&state->results, &possible_pos, EMPHASIS_STAR, true);
           if (index < not_found) {
@@ -1695,7 +1695,7 @@ bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, con
       valid_symbols[EMPHASIS_UNDER_END] ||
       valid_symbols[STRONG_UNDER_END]
   )) {
-      fprintf(stderr, "looking for strong or emph under\n");
+      // fprintf(stderr, "looking for strong or emph under\n");
       // get current start position
       state->pos.col = lexer->get_column(lexer);
       LexWrap wrapper = new_lexer(lexer, state->pos);
@@ -1707,9 +1707,9 @@ bool tree_sitter_quarto_external_scanner_scan(void *payload, TSLexer *lexer, con
       // enable STRONG_STAR_END and EMPH_STAR_END
       // at the same time...
       Pos possible_pos = wrapper.curr_pos;
-      fprintf(stderr, "lex is at: ");
+      // fprintf(stderr, "lex is at: ");
       print_pos(&possible_pos);
-      fprintf(stderr, "\n");
+      // fprintf(stderr, "\n");
       if (valid_symbols[EMPHASIS_UNDER_END]) {
           size_t index = stack_find(&state->results, &possible_pos, EMPHASIS_UNDER, true);
           if (index < not_found) {
