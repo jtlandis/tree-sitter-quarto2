@@ -47,5 +47,18 @@
     "prestart": "tree-sitter build --wasm",
     "start": "tree-sitter playground",
     "test": "node --test bindings/node/*_test.js"
-  }
+  },
+  "tree-sitter": [
+    {
+      "name": "quarto",
+      "camelcase": "Quarto",
+      "title": "Quarto",
+      "scope": "source.qmd",
+      "file-types": [
+        "qmd"
+      ],
+      "injection-regex": "^quarto$",
+      "class-name": "TreeSitterQuarto"
+    }
+  ]
 }
