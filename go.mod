@@ -1,4 +1,4 @@
-module github.com/tree-sitter/tree-sitter-quarto
+module github.com/tree-sitter/tree-sitter-quarto2
 
 go 1.22
 

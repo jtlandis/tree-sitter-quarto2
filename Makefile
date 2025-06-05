@@ -3,7 +3,7 @@ $(error Windows is not supported)
 endif
 
 LANGUAGE_NAME := tree-sitter-quarto
-HOMEPAGE_URL := https://github.com/tree-sitter/tree-sitter-quarto
+HOMEPAGE_URL := https://github.com/jtlandis/tree-sitter-quarto2
 VERSION := 0.1.0
 
 # repository
