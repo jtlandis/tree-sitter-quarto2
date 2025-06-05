@@ -1,3 +1,12 @@
+/**
+ * @file Quarto markdown format
+ * @author jtlandis <jtlandis314@gmail.com>
+ * @license MIT
+ */
+
+/// <reference types="tree-sitter-cli/dsl" />
+// @ts-check
+
 module.exports = grammar({
   name: "quarto",
 
