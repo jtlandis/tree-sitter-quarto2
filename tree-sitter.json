@@ -22,7 +22,7 @@
       }
     ],
     "links": {
-      "repository": "https://github.com/tree-sitter/tree-sitter-quarto"
+      "repository": "https://github.com/jtlandis/tree-sitter-quarto2"
     }
   },
   "bindings": {
